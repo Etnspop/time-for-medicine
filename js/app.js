@@ -7,6 +7,7 @@
   // ---------- 儲存層（本機 localStorage） ----------
   const KEY_MEDS = "tfm.meds.v1";
   const KEY_LOGS = "tfm.logs.v1";        // { "YYYY-MM-DD": { "<medId>|<HH:MM>": ISOtime } }
+  const KEY_RX = "tfm.rx.v1";            // 慢性處方箋 [{id,name,note,refills:[{id,start,end,pickedUp}]}]
   const KEY_NOTIFIED = "tfm.notified.v1"; // { "YYYY-MM-DD": ["<medId>|<HH:MM>", ...] }
 
   const store = {
@@ -22,9 +23,11 @@
 
   let meds = store.read(KEY_MEDS, []);
   let logs = store.read(KEY_LOGS, {});
+  let prescriptions = store.read(KEY_RX, []);
 
   function saveMeds() { store.write(KEY_MEDS, meds); }
   function saveLogs() { store.write(KEY_LOGS, logs); }
+  function saveRx() { store.write(KEY_RX, prescriptions); }
 
   // ---------- 小工具（純邏輯共用自 js/logic.js 的 TFM） ----------
   const T = window.TFM;
@@ -75,26 +78,32 @@
     saveLogs();
   }
 
-  // 勾選/取消時調整庫存（只有「今日」的勾選會影響庫存）
-  function adjustStockForToggle(d, taken) {
-    const m = meds.find((x) => x.id === d.medId);
-    if (!m || m.stock == null || m.stock === "") return;
-    const dose = Number(m.dose) || 0;
-    const next = (Number(m.stock) || 0) + (taken ? -dose : dose);
-    m.stock = Math.max(0, next);
-    saveMeds();
+  // 把 "YYYY-MM-DD" 顯示成 "M/D"
+  function fmtMD(key) {
+    if (!key) return "—";
+    const [, m, d] = key.split("-");
+    return `${Number(m)}/${Number(d)}`;
   }
 
-  // ---------- 畫面：補藥提醒橫幅 ----------
-  function renderRefillBanner() {
+  // ---------- 畫面：今日領藥提醒橫幅 ----------
+  function renderRxBanner() {
     const banner = $("#refillBanner");
-    const low = meds.filter(T.isLowStock);
-    if (low.length === 0) { banner.hidden = true; return; }
-    const items = low.map((m) => {
-      const dl = T.daysLeft(m);
-      return `<b>${escapeHtml(m.name)}</b>（約剩 ${dl} 天 · 庫存 ${m.stock} ${escapeHtml(m.unit)}）`;
-    }).join("、");
-    banner.innerHTML = `<span class="banner-title">🔔 該補藥囉</span>以下藥物快用完了：${items}`;
+    const alerts = T.activeRefillAlerts(prescriptions, todayKey(), 3);
+    if (alerts.length === 0) { banner.hidden = true; return; }
+    const open = banner.classList;
+    const hasOpen = alerts.some((a) => a.status === "open");
+    open.toggle("banner-open", hasOpen);
+    const items = alerts.map((a) => {
+      const range = `${fmtMD(a.refill.start)}–${fmtMD(a.refill.end)}`;
+      if (a.status === "open") {
+        const left = a.daysUntilEnd;
+        const tail = left === 0 ? "（今天最後一天）" : left > 0 ? `（剩 ${left} 天）` : "";
+        return `<b>${escapeHtml(a.rxName)}</b> 可領藥中 ${range}${tail}`;
+      }
+      return `<b>${escapeHtml(a.rxName)}</b> ${a.daysUntilStart} 天後開放領藥（${fmtMD(a.refill.start)} 起）`;
+    }).join("<br>");
+    const title = hasOpen ? "💊 可以去領藥囉" : "🔔 即將可領藥";
+    banner.innerHTML = `<span class="banner-title">${title}</span>${items}`;
     banner.hidden = false;
   }
 
@@ -104,7 +113,7 @@
     $("#todayLabel").textContent =
       `${d.getFullYear()} 年 ${d.getMonth() + 1} 月 ${d.getDate()} 日（週${weekdayZh(d)}）`;
 
-    renderRefillBanner();
+    renderRxBanner();
     const doses = todaysDoses();
     const list = $("#todayList");
     const empty = $("#todayEmpty");
@@ -141,7 +150,6 @@
       li.querySelector(".check").addEventListener("click", () => {
         const willTake = !taken;
         setTaken(d0, willTake);
-        adjustStockForToggle(d0, willTake);
         renderAll();
         toast(willTake ? `已服用：${d0.name} ${d0.time}` : "已取消勾選");
       });
@@ -169,17 +177,11 @@
       li.className = "med-card";
       const times = (m.times || []).slice().sort().join("、") || "未設定時間";
       const noteHtml = m.note ? ` · ${escapeHtml(m.note)}` : "";
-      const tracked = m.stock != null && m.stock !== "";
-      const low = T.isLowStock(m);
-      const stockHtml = tracked
-        ? `<div class="m-sub">${low ? "⚠️ " : "📦 "}庫存 ${m.stock} ${escapeHtml(m.unit)}（約 ${T.daysLeft(m)} 天）</div>`
-        : "";
       li.innerHTML = `
         <span class="pill-dot"></span>
         <div class="m-info">
           <div class="m-name">${escapeHtml(m.name)}</div>
           <div class="m-sub">${escapeHtml(fmtDose(m))} · 每日 ${m.times.length} 次（${escapeHtml(times)}）${noteHtml}</div>
-          ${stockHtml}
         </div>
         <span class="chev">›</span>`;
       li.addEventListener("click", () => openModal(m.id));
@@ -238,7 +240,84 @@
     if (selectedDay) renderDayDetail(selectedDay);
   }
 
-  function renderAll() { renderToday(); renderMeds(); renderHistory(); }
+  // ---------- 畫面：處方箋 ----------
+  const RX_STATUS_LABEL = {
+    open: "可領藥中",
+    upcoming: "尚未開放",
+    missed: "已過期未領",
+    picked: "已領藥 ✓",
+  };
+
+  function renderRx() {
+    const list = $("#rxList");
+    const empty = $("#rxEmpty");
+    list.innerHTML = "";
+
+    if (prescriptions.length === 0) { empty.hidden = false; return; }
+    empty.hidden = true;
+
+    const today = todayKey();
+    prescriptions.forEach((rx) => {
+      const li = document.createElement("li");
+      li.className = "rx-card";
+
+      const refills = (rx.refills || []).slice().sort((a, b) =>
+        (a.start || "").localeCompare(b.start || ""));
+
+      const rowsHtml = refills.length
+        ? refills.map((r) => {
+            const st = T.refillStatus(r, today);
+            let info = RX_STATUS_LABEL[st];
+            if (st === "upcoming") {
+              const d = T.daysUntil(r.start, today);
+              info = `${d} 天後開放（${fmtMD(r.start)} 起）`;
+            } else if (st === "open") {
+              const left = T.daysUntil(r.end, today);
+              info = left === 0 ? "可領藥中（今天最後一天）" : `可領藥中（剩 ${left} 天）`;
+            }
+            const btn = st === "picked" ? "取消領藥" : "標記已領";
+            return `<li class="refill-row status-${st}" data-rid="${r.id}">
+              <span class="rf-range">${fmtMD(r.start)}–${fmtMD(r.end)}</span>
+              <span class="rf-status">${info}</span>
+              <button type="button" class="rf-toggle">${btn}</button>
+            </li>`;
+          }).join("")
+        : `<li class="refill-row"><span class="rf-status muted">尚未設定領藥區間</span></li>`;
+
+      const noteHtml = rx.note ? `<div class="rx-note muted small">${escapeHtml(rx.note)}</div>` : "";
+      li.innerHTML = `
+        <div class="rx-head">
+          <span class="rx-title">${escapeHtml(rx.name || "處方箋")}</span>
+          <button type="button" class="rx-edit">編輯</button>
+        </div>
+        ${noteHtml}
+        <ul class="refill-rows">${rowsHtml}</ul>`;
+
+      li.querySelector(".rx-edit").addEventListener("click", () => openRxModal(rx.id));
+      li.querySelectorAll(".rf-toggle").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const rid = btn.closest(".refill-row").dataset.rid;
+          toggleRefillPicked(rx.id, rid);
+        });
+      });
+      list.appendChild(li);
+    });
+  }
+
+  function toggleRefillPicked(rxId, refillId) {
+    const rx = prescriptions.find((x) => x.id === rxId);
+    if (!rx) return;
+    const r = (rx.refills || []).find((x) => x.id === refillId);
+    if (!r) return;
+    r.pickedUp = !r.pickedUp;
+    r.pickedUpAt = r.pickedUp ? new Date().toISOString() : null;
+    saveRx();
+    renderRx();
+    renderToday();
+    toast(r.pickedUp ? "已標記領藥 ✓" : "已取消");
+  }
+
+  function renderAll() { renderToday(); renderMeds(); renderHistory(); renderRx(); }
 
   // ---------- 新增 / 編輯彈窗 ----------
   let editingId = null;
@@ -267,8 +346,6 @@
       $("#medDose").value = m.dose;
       $("#medUnit").value = m.unit;
       $("#medNote").value = m.note || "";
-      $("#medStock").value = m.stock != null ? m.stock : "";
-      $("#medThreshold").value = m.lowThreshold != null ? m.lowThreshold : "";
       (m.times.length ? m.times : ["08:00"]).forEach(addTimeChip);
       $("#deleteMedBtn").hidden = false;
     } else {
@@ -276,19 +353,7 @@
       addTimeChip("08:00");
       $("#deleteMedBtn").hidden = true;
     }
-    updateStockHint();
     $("#medModal").hidden = false;
-  }
-
-  // 即時顯示「庫存約可服用幾天」
-  function updateStockHint() {
-    const hint = $("#stockHint");
-    const stock = $("#medStock").value.trim();
-    if (stock === "") { hint.hidden = true; return; }
-    const perDay = (Number($("#medDose").value) || 0) * collectTimes().length;
-    if (perDay <= 0) { hint.hidden = true; return; }
-    hint.textContent = `目前庫存約可服用 ${Math.floor(Number(stock) / perDay)} 天`;
-    hint.hidden = false;
   }
 
   function closeModal() { $("#medModal").hidden = true; editingId = null; }
@@ -307,20 +372,16 @@
     const unit = $("#medUnit").value;
     const note = $("#medNote").value.trim();
     const times = collectTimes();
-    const stockRaw = $("#medStock").value.trim();
-    const stock = stockRaw === "" ? null : Math.max(0, Number(stockRaw));
-    const thrRaw = $("#medThreshold").value.trim();
-    const lowThreshold = thrRaw === "" ? null : Math.max(0, Number(thrRaw));
 
     if (!name) { toast("請輸入藥物名稱"); return; }
     if (times.length === 0) { toast("請至少設定一個服用時間"); return; }
 
     if (editingId) {
       const m = meds.find((x) => x.id === editingId);
-      Object.assign(m, { name, dose, unit, note, times, stock, lowThreshold });
+      Object.assign(m, { name, dose, unit, note, times });
       toast("已更新藥物");
     } else {
-      meds.push({ id: uid(), name, dose, unit, note, times, stock, lowThreshold, createdAt: Date.now() });
+      meds.push({ id: uid(), name, dose, unit, note, times, createdAt: Date.now() });
       toast("已新增藥物");
     }
     saveMeds();
@@ -336,6 +397,117 @@
     saveMeds();
     closeModal();
     renderAll();
+    toast("已刪除");
+  }
+
+  // ---------- 處方箋的新增 / 編輯彈窗 ----------
+  let editingRxId = null;
+
+  // 預設新領藥區間：開始=今天、結束=今天+13 天（慢箋一段約 14 天領藥彈性，使用者可改）
+  function defaultRefillRange() {
+    const start = todayKey();
+    const end = todayKey(new Date(Date.now() + 13 * 86400000));
+    return { start, end };
+  }
+
+  function addRefillRow(refill) {
+    const wrap = $("#refillsWrap");
+    const r = refill || defaultRefillRange();
+    const row = document.createElement("div");
+    row.className = "refill-edit";
+    row.innerHTML = `
+      <input type="date" class="rf-start" value="${r.start || ""}" />
+      <span class="sep">～</span>
+      <input type="date" class="rf-end" value="${r.end || ""}" />
+      <button type="button" class="rf-rm" aria-label="移除這次領藥">×</button>`;
+    row.querySelector(".rf-rm").addEventListener("click", () => row.remove());
+    wrap.appendChild(row);
+  }
+
+  function collectRefills(existing) {
+    // existing：原處方箋的 refills，用來保留 pickedUp 狀態（依序對應）
+    const rows = [...$("#refillsWrap").querySelectorAll(".refill-edit")];
+    const prev = existing || [];
+    return rows.map((row, i) => {
+      const start = row.querySelector(".rf-start").value;
+      const end = row.querySelector(".rf-end").value;
+      const old = prev[i] || {};
+      return {
+        id: old.id || uid(),
+        start,
+        end,
+        pickedUp: !!old.pickedUp,
+        pickedUpAt: old.pickedUpAt || null,
+      };
+    }).filter((r) => r.start || r.end);
+  }
+
+  function openRxModal(id) {
+    editingRxId = id || null;
+    $("#rxForm").reset();
+    $("#refillsWrap").innerHTML = "";
+
+    if (id) {
+      const rx = prescriptions.find((x) => x.id === id);
+      if (!rx) return;
+      $("#rxModalTitle").textContent = "編輯處方箋";
+      $("#rxName").value = rx.name || "";
+      $("#rxNote").value = rx.note || "";
+      const refills = (rx.refills || []).slice().sort((a, b) =>
+        (a.start || "").localeCompare(b.start || ""));
+      (refills.length ? refills : [defaultRefillRange()]).forEach(addRefillRow);
+      $("#deleteRxBtn").hidden = false;
+    } else {
+      $("#rxModalTitle").textContent = "新增處方箋";
+      addRefillRow();
+      $("#deleteRxBtn").hidden = true;
+    }
+    $("#rxModal").hidden = false;
+  }
+
+  function closeRxModal() { $("#rxModal").hidden = true; editingRxId = null; }
+
+  function submitRx(e) {
+    e.preventDefault();
+    const name = $("#rxName").value.trim();
+    const note = $("#rxNote").value.trim();
+
+    if (!name) { toast("請輸入處方箋名稱"); return; }
+
+    const existing = editingRxId
+      ? ((prescriptions.find((x) => x.id === editingRxId) || {}).refills || [])
+      : [];
+    const sortedExisting = existing.slice().sort((a, b) =>
+      (a.start || "").localeCompare(b.start || ""));
+    const refills = collectRefills(sortedExisting);
+
+    if (refills.length === 0) { toast("請至少設定一次領藥區間"); return; }
+    if (refills.some((r) => !r.start || !r.end)) { toast("每次領藥都要填開始與結束日期"); return; }
+    if (refills.some((r) => r.end < r.start)) { toast("結束日期不能早於開始日期"); return; }
+
+    if (editingRxId) {
+      const rx = prescriptions.find((x) => x.id === editingRxId);
+      Object.assign(rx, { name, note, refills });
+      toast("已更新處方箋");
+    } else {
+      prescriptions.push({ id: uid(), name, note, refills, createdAt: Date.now() });
+      toast("已新增處方箋");
+    }
+    saveRx();
+    closeRxModal();
+    renderRx();
+    renderToday();
+  }
+
+  function deleteRx() {
+    if (!editingRxId) return;
+    const rx = prescriptions.find((x) => x.id === editingRxId);
+    if (!confirm(`確定要刪除「${rx ? rx.name : ""}」嗎？`)) return;
+    prescriptions = prescriptions.filter((x) => x.id !== editingRxId);
+    saveRx();
+    closeRxModal();
+    renderRx();
+    renderToday();
     toast("已刪除");
   }
 
@@ -437,19 +609,25 @@
       showNotification("💊 該吃藥囉", `你有 ${due.length} 項藥物到了服用時間，快打開確認吧。`);
     }
 
-    // 補藥提醒：每天最多通知一次
-    const lowMeds = meds.filter(T.isLowStock);
-    if (lowMeds.length && !notified.includes("refill")) {
-      markNotified("refill");
-      showNotification("🔔 該補藥囉", `${lowMeds.map((m) => m.name).join("、")} 快用完了，記得補充。`);
-    }
+    // 領藥提醒：每張處方箋每次領藥，開放當天提醒一次
+    const today = todayKey();
+    const alerts = T.activeRefillAlerts(prescriptions, today, 0); // 只在「可領藥中」才通知
+    alerts.forEach((a) => {
+      const key = "rx|" + a.refillId;
+      if (a.status === "open" && !notified.includes(key)) {
+        markNotified(key);
+        const left = a.daysUntilEnd;
+        const tail = left === 0 ? "（今天最後一天）" : left > 0 ? `，領藥期限到 ${fmtMD(a.refill.end)}` : "";
+        showNotification("💊 可以去領藥囉", `${a.rxName} 現在可以領藥了${tail}。`);
+      }
+    });
   }
 
   // ---------- 匯出 / 匯入備份 ----------
   function exportData() {
     const data = {
-      app: "time-for-medicine", version: 1,
-      exportedAt: new Date().toISOString(), meds, logs,
+      app: "time-for-medicine", version: 2,
+      exportedAt: new Date().toISOString(), meds, logs, prescriptions,
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -469,11 +647,14 @@
       try {
         const data = JSON.parse(reader.result);
         if (!data || !Array.isArray(data.meds)) throw new Error("格式不符");
-        if (!confirm(`這會以備份內容「取代」目前資料（${data.meds.length} 種藥物）。確定還原嗎？`)) return;
+        const rxCount = Array.isArray(data.prescriptions) ? data.prescriptions.length : 0;
+        if (!confirm(`這會以備份內容「取代」目前資料（${data.meds.length} 種藥物、${rxCount} 張處方箋）。確定還原嗎？`)) return;
         meds = data.meds;
         logs = data.logs && typeof data.logs === "object" ? data.logs : {};
+        prescriptions = Array.isArray(data.prescriptions) ? data.prescriptions : [];
         saveMeds();
         saveLogs();
+        saveRx();
         selectedDay = null;
         $("#dayDetail").hidden = true;
         renderAll();
@@ -493,15 +674,23 @@
 
     // 藥物表單
     $("#addMedBtn").addEventListener("click", () => openModal());
-    $("#addTimeBtn").addEventListener("click", () => { addTimeChip("12:00"); updateStockHint(); });
+    $("#addTimeBtn").addEventListener("click", () => addTimeChip("12:00"));
     $("#cancelBtn").addEventListener("click", closeModal);
     $("#deleteMedBtn").addEventListener("click", deleteMed);
     $("#medForm").addEventListener("submit", submitMed);
     $("#medModal").addEventListener("click", (e) => {
       if (e.target.id === "medModal") closeModal();
     });
-    $("#medStock").addEventListener("input", updateStockHint);
-    $("#medDose").addEventListener("input", updateStockHint);
+
+    // 處方箋表單
+    $("#addRxBtn").addEventListener("click", () => openRxModal());
+    $("#addRefillBtn").addEventListener("click", () => addRefillRow());
+    $("#rxCancelBtn").addEventListener("click", closeRxModal);
+    $("#deleteRxBtn").addEventListener("click", deleteRx);
+    $("#rxForm").addEventListener("submit", submitRx);
+    $("#rxModal").addEventListener("click", (e) => {
+      if (e.target.id === "rxModal") closeRxModal();
+    });
 
     // 月曆切換月份
     $("#calPrev").addEventListener("click", () => {

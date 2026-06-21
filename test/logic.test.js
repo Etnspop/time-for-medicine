@@ -129,25 +129,57 @@ test("buildMonth：6 週 42 格、含當月與鄰月", () => {
   assert.strictEqual(inMonth[29].dateKey, "2026-06-30");
 });
 
-// ---------- 庫存 / 補藥提醒 ----------
+// ---------- 慢性處方箋領藥 ----------
 
-test("dailyConsumption：每次劑量 × 一天次數", () => {
-  assert.strictEqual(T.dailyConsumption({ dose: 2, times: ["08:00", "20:00"] }), 4);
-  assert.strictEqual(T.dailyConsumption({ dose: 1, times: [] }), 0);
+test("daysUntil：日期相差天數", () => {
+  assert.strictEqual(T.daysUntil("2026-06-21", "2026-06-21"), 0);
+  assert.strictEqual(T.daysUntil("2026-06-25", "2026-06-21"), 4);
+  assert.strictEqual(T.daysUntil("2026-06-20", "2026-06-21"), -1);
+  assert.strictEqual(T.daysUntil(null, "2026-06-21"), null);
 });
 
-test("daysLeft：庫存可撐天數，無庫存回 null", () => {
-  assert.strictEqual(T.daysLeft({ dose: 1, times: ["08:00", "20:00"], stock: 10 }), 5);
-  assert.strictEqual(T.daysLeft({ dose: 1, times: ["08:00"], stock: 7 }), 7);
-  assert.strictEqual(T.daysLeft({ dose: 1, times: ["08:00"] }), null); // 未設庫存
-  assert.strictEqual(T.daysLeft({ dose: 1, times: ["08:00"], stock: "" }), null);
-  assert.strictEqual(T.daysLeft({ dose: 1, times: [], stock: 5 }), null); // 無服用時間
+test("refillStatus：四種領藥狀態", () => {
+  const today = "2026-06-10";
+  assert.strictEqual(T.refillStatus({ start: "2026-06-15", end: "2026-06-20" }, today), "upcoming");
+  assert.strictEqual(T.refillStatus({ start: "2026-06-05", end: "2026-06-15" }, today), "open");
+  assert.strictEqual(T.refillStatus({ start: "2026-06-01", end: "2026-06-08" }, today), "missed");
+  assert.strictEqual(T.refillStatus({ start: "2026-06-01", end: "2026-06-30", pickedUp: true }, today), "picked");
+  // 邊界：剛好開始日 / 結束日都算可領
+  assert.strictEqual(T.refillStatus({ start: "2026-06-10", end: "2026-06-20" }, today), "open");
+  assert.strictEqual(T.refillStatus({ start: "2026-06-01", end: "2026-06-10" }, today), "open");
 });
 
-test("isLowStock：低於門檻才算偏低", () => {
-  assert.strictEqual(T.isLowStock({ dose: 1, times: ["08:00"], stock: 5 }), true);  // 5 天 <=7
-  assert.strictEqual(T.isLowStock({ dose: 1, times: ["08:00"], stock: 30 }), false); // 30 天
-  assert.strictEqual(T.isLowStock({ dose: 1, times: ["08:00"], stock: 3, lowThreshold: 2 }), false);
-  assert.strictEqual(T.isLowStock({ dose: 1, times: ["08:00"], stock: 2, lowThreshold: 2 }), true);
-  assert.strictEqual(T.isLowStock({ dose: 1, times: ["08:00"] }), false); // 未追蹤
+test("activeRefillAlerts：挑出可領藥中或即將開放且未領的", () => {
+  const today = "2026-06-10";
+  const rxs = [
+    {
+      id: "rx1", name: "心臟科",
+      refills: [
+        { id: "a", start: "2026-06-01", end: "2026-06-08" },           // 已過期 -> 不列
+        { id: "b", start: "2026-06-05", end: "2026-06-15" },           // 可領藥中 -> 列
+        { id: "c", start: "2026-06-12", end: "2026-06-22" },           // 2 天後開放 -> 列（soon=3）
+        { id: "d", start: "2026-06-20", end: "2026-06-30" },           // 10 天後 -> 不列
+      ],
+    },
+    {
+      id: "rx2", name: "新陳代謝科",
+      refills: [
+        { id: "e", start: "2026-06-06", end: "2026-06-16", pickedUp: true }, // 已領 -> 不列
+        { id: "f", start: "2026-06-09", end: "2026-06-19" },                 // 可領藥中 -> 列
+      ],
+    },
+  ];
+  const alerts = T.activeRefillAlerts(rxs, today, 3);
+  const ids = alerts.map((x) => x.refillId);
+  assert.deepStrictEqual(ids.sort(), ["b", "c", "f"].sort());
+  // 可領藥中（open）要排在即將開放（upcoming）前面
+  assert.strictEqual(alerts[alerts.length - 1].refillId, "c");
+  assert.strictEqual(alerts[alerts.length - 1].status, "upcoming");
+  assert.strictEqual(alerts[alerts.length - 1].daysUntilStart, 2);
+});
+
+test("activeRefillAlerts：空資料安全", () => {
+  assert.deepStrictEqual(T.activeRefillAlerts([], "2026-06-10", 3), []);
+  assert.deepStrictEqual(T.activeRefillAlerts(undefined, "2026-06-10"), []);
+  assert.deepStrictEqual(T.activeRefillAlerts([{ id: "x", refills: [] }], "2026-06-10"), []);
 });

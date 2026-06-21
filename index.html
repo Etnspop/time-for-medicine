@@ -67,6 +67,20 @@
       <button id="addMedBtn" class="primary-btn full">＋ 新增藥物</button>
     </section>
 
+    <!-- 處方箋（慢性病連續處方箋領藥） -->
+    <section id="view-rx" class="view">
+      <p class="muted small section-intro">
+        記錄慢性病連續處方箋的每次領藥區間，到了可領藥的日子會提醒你。一張處方箋可加入多次領藥，也可加入多張處方箋。
+      </p>
+      <div id="rxEmpty" class="empty-state" hidden>
+        <div class="empty-emoji">📋</div>
+        <p>還沒有任何處方箋。</p>
+        <p class="muted">點下方的「＋ 新增處方箋」開始。</p>
+      </div>
+      <ul id="rxList" class="rx-list"></ul>
+      <button id="addRxBtn" class="primary-btn full">＋ 新增處方箋</button>
+    </section>
+
     <!-- 更多 -->
     <section id="view-more" class="view">
       <div class="settings-group">
@@ -102,6 +116,9 @@
     </button>
     <button class="tab" data-view="meds">
       <span class="tab-icon">💊</span><span>藥物</span>
+    </button>
+    <button class="tab" data-view="rx">
+      <span class="tab-icon">📋</span><span>處方箋</span>
     </button>
     <button class="tab" data-view="more">
       <span class="tab-icon">⚙️</span><span>更多</span>
@@ -145,24 +162,39 @@
           備註（選填）
           <input type="text" id="medNote" maxlength="60" placeholder="例如：飯後服用" />
         </label>
-        <div class="field refill-field">
-          <span class="field-label">補藥提醒（選填）</span>
-          <div class="row">
-            <label class="flex2">
-              目前剩餘數量
-              <input type="number" id="medStock" min="0" step="1" placeholder="例如：30" inputmode="numeric" />
-            </label>
-            <label class="flex1">
-              低於幾天提醒
-              <input type="number" id="medThreshold" min="0" step="1" placeholder="7" inputmode="numeric" />
-            </label>
-          </div>
-          <p id="stockHint" class="muted small" hidden></p>
-        </div>
         <div class="modal-actions">
           <button type="button" id="deleteMedBtn" class="danger-btn" hidden>刪除</button>
           <span class="spacer"></span>
           <button type="button" id="cancelBtn" class="ghost-btn">取消</button>
+          <button type="submit" class="primary-btn">儲存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 新增/編輯處方箋的彈窗 -->
+  <div id="rxModal" class="modal" hidden>
+    <div class="modal-card">
+      <h2 id="rxModalTitle">新增處方箋</h2>
+      <form id="rxForm">
+        <label>
+          處方箋名稱
+          <input type="text" id="rxName" required maxlength="40" placeholder="例如：心臟科 王醫師 / 降血壓藥" />
+        </label>
+        <div class="field">
+          <span class="field-label">領藥區間（可加入多次）</span>
+          <p class="muted small" style="margin:0 0 8px">每一段是一次可去藥局領藥的期間，例如 06/01～06/15。</p>
+          <div id="refillsWrap" class="refills-wrap"></div>
+          <button type="button" id="addRefillBtn" class="ghost-btn">＋ 增加一次領藥</button>
+        </div>
+        <label>
+          備註（選填）
+          <input type="text" id="rxNote" maxlength="60" placeholder="例如：記得帶健保卡" />
+        </label>
+        <div class="modal-actions">
+          <button type="button" id="deleteRxBtn" class="danger-btn" hidden>刪除</button>
+          <span class="spacer"></span>
+          <button type="button" id="rxCancelBtn" class="ghost-btn">取消</button>
           <button type="submit" class="primary-btn">儲存</button>
         </div>
       </form>

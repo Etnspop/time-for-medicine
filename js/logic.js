@@ -121,32 +121,59 @@
     return cells;
   }
 
-  // ---------- 庫存 / 補藥提醒 ----------
+  // ---------- 慢性處方箋領藥 ----------
 
-  // 每日消耗量 = 每次劑量 × 一天次數
-  function dailyConsumption(med) {
-    return Number(med.dose || 0) * ((med.times && med.times.length) || 0);
+  // 兩個日期字串相差幾天（target - today），正數代表未來
+  function daysUntil(targetKey, todayStr) {
+    if (!targetKey || !todayStr) return null;
+    const a = new Date(targetKey + "T00:00:00");
+    const b = new Date(todayStr + "T00:00:00");
+    return Math.round((a - b) / 86400000);
   }
 
-  // 還能撐幾天（無庫存資料回傳 null）
-  function daysLeft(med) {
-    if (med.stock == null || med.stock === "") return null;
-    const perDay = dailyConsumption(med);
-    if (perDay <= 0) return null;
-    return Math.floor(Number(med.stock) / perDay);
+  // 單次領藥的狀態
+  // status: picked（已領）/ upcoming（尚未開放）/ open（可領藥中）/ missed（已過期未領）
+  function refillStatus(refill, todayStr) {
+    if (!refill) return "upcoming";
+    if (refill.pickedUp) return "picked";
+    if (refill.start && todayStr < refill.start) return "upcoming";
+    if (refill.end && todayStr > refill.end) return "missed";
+    return "open";
   }
 
-  // 是否庫存偏低（預設 7 天內）
-  function isLowStock(med) {
-    const dl = daysLeft(med);
-    if (dl == null) return false;
-    const threshold = med.lowThreshold != null ? Number(med.lowThreshold) : 7;
-    return dl <= threshold;
+  // 找出需要提醒的領藥：正在可領藥中、或將在 soonDays 內開放，且尚未領取
+  // 回傳已排序的提醒清單（可領藥中優先、其次依開始日）
+  function activeRefillAlerts(prescriptions, todayStr, soonDays) {
+    const soon = soonDays == null ? 3 : soonDays;
+    const alerts = [];
+    (prescriptions || []).forEach((rx) => {
+      (rx.refills || []).forEach((r) => {
+        const status = refillStatus(r, todayStr);
+        if (status === "picked" || status === "missed") return;
+        const dStart = daysUntil(r.start, todayStr);
+        if (status === "open" || (status === "upcoming" && dStart != null && dStart <= soon)) {
+          alerts.push({
+            rxId: rx.id,
+            rxName: rx.name || "處方箋",
+            refillId: r.id,
+            refill: r,
+            status,
+            daysUntilStart: dStart,
+            daysUntilEnd: daysUntil(r.end, todayStr),
+          });
+        }
+      });
+    });
+    alerts.sort((a, b) => {
+      if (a.status !== b.status) return a.status === "open" ? -1 : 1;
+      return (a.refill.start || "").localeCompare(b.refill.start || "");
+    });
+    return alerts;
   }
 
   return {
     pad, todayKey, hm, weekdayZh, fmtDose, doseId, todaysDoses, computeDue, progress, escapeHtml,
     dateKeyOf, scheduledDosesForDate, dayStatus, buildMonth,
-    dailyConsumption, daysLeft, isLowStock,
+    daysUntil, refillStatus, activeRefillAlerts,
   };
 });
