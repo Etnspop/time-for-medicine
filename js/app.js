@@ -8,7 +8,9 @@
   const KEY_MEDS = "tfm.meds.v1";
   const KEY_LOGS = "tfm.logs.v1";        // { "YYYY-MM-DD": { "<medId>|<HH:MM>": ISOtime } }
   const KEY_RX = "tfm.rx.v1";            // 慢性處方箋 [{id,name,note,refills:[{id,start,end,pickedUp}]}]
-  const KEY_NOTIFIED = "tfm.notified.v1"; // { "YYYY-MM-DD": ["<medId>|<HH:MM>", ...] }
+  const KEY_NOTIFIED = "tfm.notified.v1"; // { "YYYY-MM-DD": { "<doseId>": 上次提醒毫秒, "rx|<id>": true } }
+  const KEY_SETTINGS = "tfm.settings.v1"; // { repeatReminders: bool }
+  const REPEAT_MS = 4 * 60 * 60 * 1000;   // 每 4 小時重複提醒
 
   const store = {
     read(key, fallback) {
@@ -24,10 +26,12 @@
   let meds = store.read(KEY_MEDS, []);
   let logs = store.read(KEY_LOGS, {});
   let prescriptions = store.read(KEY_RX, []);
+  let settings = store.read(KEY_SETTINGS, { repeatReminders: true });
 
   function saveMeds() { store.write(KEY_MEDS, meds); }
   function saveLogs() { store.write(KEY_LOGS, logs); }
   function saveRx() { store.write(KEY_RX, prescriptions); }
+  function saveSettings() { store.write(KEY_SETTINGS, settings); }
 
   // ---------- 小工具（純邏輯共用自 js/logic.js 的 TFM） ----------
   const T = window.TFM;
@@ -569,16 +573,16 @@
     }
   }
 
-  // 提醒排程：App 開著時，每分鐘檢查是否有「已到時間、尚未服用、尚未提醒過」的劑量
-  function getNotified() {
+  // 提醒紀錄：每天一個物件 { "<doseId>": 上次提醒毫秒, "rx|<id>": true }
+  function getRemindMap() {
     const all = store.read(KEY_NOTIFIED, {});
-    return all[todayKey()] || [];
+    const day = all[todayKey()];
+    return day && !Array.isArray(day) ? day : {};
   }
-  function markNotified(id) {
+  function saveRemindMap(map) {
     const all = store.read(KEY_NOTIFIED, {});
     const k = todayKey();
-    if (!all[k]) all[k] = [];
-    if (!all[k].includes(id)) all[k].push(id);
+    all[k] = map;
     // 清掉舊日期，避免無限增長
     Object.keys(all).forEach((day) => { if (day !== k) delete all[day]; });
     store.write(KEY_NOTIFIED, all);
@@ -594,40 +598,46 @@
     if (!("Notification" in window) || Notification.permission !== "granted") return;
 
     const now = nowHM();
-    const notified = getNotified();
+    const nowEpoch = Date.now();
     const doses = todaysDoses();
-    const dayLog = logs[todayKey()] || {};
+    const dayLog = logs[tk] || {};
     const takenIds = Object.keys(dayLog);
+    const map = getRemindMap();
+    let changed = false;
 
-    const due = T.computeDue(doses, now, takenIds, notified);
-    due.forEach((d) => markNotified(doseId(d)));
+    // 服藥提醒：到時間未服用就提醒；若開啟重複提醒，每 4 小時再提醒一次，直到勾選或今天結束
+    const repeat = settings.repeatReminders !== false;
+    const toRemind = T.computeReminders(doses, now, nowEpoch, map, takenIds, { repeat, repeatMs: REPEAT_MS });
+    toRemind.forEach((d) => { map[doseId(d)] = nowEpoch; changed = true; });
 
-    if (due.length === 1) {
-      const d = due[0];
+    if (toRemind.length === 1) {
+      const d = toRemind[0];
       showNotification("💊 該吃藥囉", `${d.time} ${d.name}（${d.dose}）${d.note ? " · " + d.note : ""}`);
-    } else if (due.length > 1) {
-      showNotification("💊 該吃藥囉", `你有 ${due.length} 項藥物到了服用時間，快打開確認吧。`);
+    } else if (toRemind.length > 1) {
+      showNotification("💊 該吃藥囉", `你有 ${toRemind.length} 項藥還沒服用，快打開確認吧。`);
     }
 
     // 領藥提醒：每張處方箋每次領藥，開放當天提醒一次
-    const today = todayKey();
-    const alerts = T.activeRefillAlerts(prescriptions, today, 0); // 只在「可領藥中」才通知
+    const alerts = T.activeRefillAlerts(prescriptions, tk, 0); // 只在「可領藥中」才通知
     alerts.forEach((a) => {
       const key = "rx|" + a.refillId;
-      if (a.status === "open" && !notified.includes(key)) {
-        markNotified(key);
+      if (a.status === "open" && !map[key]) {
+        map[key] = true;
+        changed = true;
         const left = a.daysUntilEnd;
         const tail = left === 0 ? "（今天最後一天）" : left > 0 ? `，領藥期限到 ${fmtMD(a.refill.end)}` : "";
         showNotification("💊 可以去領藥囉", `${a.rxName} 現在可以領藥了${tail}。`);
       }
     });
+
+    if (changed) saveRemindMap(map);
   }
 
   // ---------- 匯出 / 匯入備份 ----------
   function exportData() {
     const data = {
       app: "time-for-medicine", version: 2,
-      exportedAt: new Date().toISOString(), meds, logs, prescriptions,
+      exportedAt: new Date().toISOString(), meds, logs, prescriptions, settings,
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -652,6 +662,11 @@
         meds = data.meds;
         logs = data.logs && typeof data.logs === "object" ? data.logs : {};
         prescriptions = Array.isArray(data.prescriptions) ? data.prescriptions : [];
+        if (data.settings && typeof data.settings === "object") {
+          settings = data.settings;
+          saveSettings();
+          $("#repeatToggle").checked = settings.repeatReminders !== false;
+        }
         saveMeds();
         saveLogs();
         saveRx();
@@ -711,6 +726,15 @@
       e.target.value = "";
     });
     $("#moreNotifyBtn").addEventListener("click", toggleNotify);
+
+    // 重複提醒設定
+    const repeatToggle = $("#repeatToggle");
+    repeatToggle.checked = settings.repeatReminders !== false;
+    repeatToggle.addEventListener("change", () => {
+      settings.repeatReminders = repeatToggle.checked;
+      saveSettings();
+      toast(repeatToggle.checked ? "已開啟：未服藥每 4 小時提醒" : "已關閉重複提醒");
+    });
 
     // 通知
     $("#notifyBtn").addEventListener("click", toggleNotify);

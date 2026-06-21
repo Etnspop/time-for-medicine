@@ -63,6 +63,43 @@ test("computeDue：只挑已到時間、未服用、未提醒過的", () => {
   assert.strictEqual(due.length, 2);
 });
 
+test("computeReminders：到時間先提醒一次，之後每 4 小時重複，已服用即停止", () => {
+  const meds = [{ id: "a", name: "藥", dose: 1, unit: "顆", times: ["08:00", "20:00"] }];
+  const doses = T.todaysDoses(meds);
+  const HOUR = 3600 * 1000;
+  const E = 1_700_000_000_000;
+  const opts = { repeat: true, repeatMs: 4 * HOUR };
+
+  // 09:00、未提醒過 → 只有 08:00 那筆該提醒（20:00 還沒到）
+  let due = T.computeReminders(doses, "09:00", E, {}, [], opts);
+  assert.deepStrictEqual(due.map(T.doseId), ["a|08:00"]);
+
+  // 剛提醒過（map 記錄 E）→ 同一時刻不再重複
+  const map = { "a|08:00": E };
+  assert.strictEqual(T.computeReminders(doses, "09:00", E, map, [], opts).length, 0);
+
+  // 還沒滿 4 小時 → 不提醒
+  assert.strictEqual(T.computeReminders(doses, "12:30", E + 3.9 * HOUR, map, [], opts).length, 0);
+
+  // 滿 4 小時 → 再次提醒
+  assert.deepStrictEqual(
+    T.computeReminders(doses, "13:00", E + 4 * HOUR, map, [], opts).map(T.doseId),
+    ["a|08:00"]
+  );
+
+  // 關閉重複提醒 → 即使超過 4 小時也不再提醒
+  assert.strictEqual(
+    T.computeReminders(doses, "13:00", E + 4 * HOUR, map, [], { repeat: false, repeatMs: 4 * HOUR }).length,
+    0
+  );
+
+  // 已服用 → 不提醒
+  assert.strictEqual(T.computeReminders(doses, "21:00", E + 13 * HOUR, {}, ["a|08:00", "a|20:00"], opts).length, 0);
+
+  // 兩筆都到時間、都沒提醒過 → 兩筆都提醒
+  assert.strictEqual(T.computeReminders(doses, "21:00", E, {}, [], opts).length, 2);
+});
+
 test("progress 計算已服用比例", () => {
   const doses = T.todaysDoses(meds); // 3 項
   assert.deepStrictEqual(T.progress(doses, []), { done: 0, total: 3, pct: 0 });

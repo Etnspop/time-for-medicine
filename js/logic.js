@@ -58,6 +58,28 @@
     });
   }
 
+  // 找出「此刻該（再次）提醒」的劑量，支援未服藥時每隔一段時間重複提醒。
+  // - doses：今日劑量；nowHM：現在 HH:MM；nowEpoch：現在毫秒
+  // - remindMap：{ doseId: 上次提醒的毫秒時間 }
+  // - takenIds：已服用的 doseId 集合
+  // - opts.repeat：是否開啟重複提醒；opts.repeatMs：重複間隔（毫秒）
+  // 規則：到時間且未服用 → 第一次一定提醒；之後每隔 repeatMs 再提醒一次，
+  //       已服用或跨日（remindMap 每日重置）即停止。
+  function computeReminders(doses, nowHM, nowEpoch, remindMap, takenIds, opts) {
+    const taken = takenIds instanceof Set ? takenIds : new Set(takenIds || []);
+    const map = remindMap || {};
+    const repeat = !opts || opts.repeat !== false;
+    const repeatMs = (opts && opts.repeatMs) || 4 * 3600 * 1000;
+    return (doses || []).filter((d) => {
+      const id = doseId(d);
+      if (taken.has(id)) return false;
+      if (d.time > nowHM) return false;
+      const last = map[id];
+      if (last == null) return true;
+      return repeat && nowEpoch - last >= repeatMs;
+    });
+  }
+
   // 今日進度
   function progress(doses, takenIds) {
     const taken = takenIds instanceof Set ? takenIds : new Set(takenIds || []);
@@ -172,7 +194,7 @@
   }
 
   return {
-    pad, todayKey, hm, weekdayZh, fmtDose, doseId, todaysDoses, computeDue, progress, escapeHtml,
+    pad, todayKey, hm, weekdayZh, fmtDose, doseId, todaysDoses, computeDue, computeReminders, progress, escapeHtml,
     dateKeyOf, scheduledDosesForDate, dayStatus, buildMonth,
     daysUntil, refillStatus, activeRefillAlerts,
   };

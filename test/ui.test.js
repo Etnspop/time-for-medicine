@@ -241,6 +241,29 @@ test("重新開啟 App：先前存在本機的資料會自動載入", () => {
   assert.strictEqual($$(w, "#rxList .rx-card").length, 1, "應載回先前的處方箋");
 });
 
+test("重複提醒設定：預設開啟、可切換並寫入本機", () => {
+  const w = boot();
+  const toggle = $(w, "#repeatToggle");
+  assert.strictEqual(toggle.checked, true, "預設應開啟重複提醒");
+
+  toggle.checked = false;
+  fire(w, toggle, "change");
+  const saved = JSON.parse(w.localStorage.getItem("tfm.settings.v1"));
+  assert.strictEqual(saved.repeatReminders, false, "關閉後應寫入 localStorage");
+});
+
+test("重複提醒設定：重開 App 會載回先前的開關狀態", () => {
+  const dom = new JSDOM(htmlSrc, {
+    url: "https://example.org/", runScripts: "outside-only", pretendToBeVisual: true,
+  });
+  const w = dom.window;
+  w.setInterval = () => 0; w.setTimeout = () => 0; w.confirm = () => true;
+  w.localStorage.setItem("tfm.settings.v1", JSON.stringify({ repeatReminders: false }));
+  w.eval(logicSrc); w.eval(appSrc);
+  w.document.dispatchEvent(new w.Event("DOMContentLoaded"));
+  assert.strictEqual($(w, "#repeatToggle").checked, false, "應載回關閉狀態");
+});
+
 // ---------- CSS 回歸：hidden 一定隱藏 ----------
 
 test("CSS：存在 [hidden] display:none !important 規則（修正彈窗常駐 bug）", () => {
