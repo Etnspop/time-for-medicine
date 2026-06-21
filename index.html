@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0d9488" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="吃藥時間" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="css/style.css" />
+  <title>吃藥時間 · Time for Medicine</title>
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-top">
+      <h1 class="brand"><span class="brand-icon">💊</span> 吃藥時間</h1>
+      <button id="notifyBtn" class="icon-btn" title="開啟提醒通知" aria-label="開啟提醒通知">🔔</button>
+    </div>
+    <p id="todayLabel" class="today-label"></p>
+    <div class="progress-wrap" id="progressWrap" hidden>
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      <span class="progress-text" id="progressText"></span>
+    </div>
+  </header>
+
+  <main>
+    <!-- 今日 -->
+    <section id="view-today" class="view active">
+      <div id="todayEmpty" class="empty-state" hidden>
+        <div class="empty-emoji">🗓️</div>
+        <p>今天沒有需要服用的藥物。</p>
+        <p class="muted">到「我的藥物」新增一筆吧。</p>
+      </div>
+      <ul id="todayList" class="dose-list"></ul>
+    </section>
+
+    <!-- 我的藥物 -->
+    <section id="view-meds" class="view">
+      <div id="medsEmpty" class="empty-state" hidden>
+        <div class="empty-emoji">💊</div>
+        <p>還沒有任何藥物。</p>
+        <p class="muted">點下方的「＋ 新增藥物」開始。</p>
+      </div>
+      <ul id="medList" class="med-list"></ul>
+      <button id="addMedBtn" class="primary-btn full">＋ 新增藥物</button>
+    </section>
+  </main>
+
+  <nav class="tabbar">
+    <button class="tab active" data-view="today">
+      <span class="tab-icon">✅</span><span>今日</span>
+    </button>
+    <button class="tab" data-view="meds">
+      <span class="tab-icon">💊</span><span>我的藥物</span>
+    </button>
+  </nav>
+
+  <!-- 新增/編輯藥物的彈窗 -->
+  <div id="medModal" class="modal" hidden>
+    <div class="modal-card">
+      <h2 id="modalTitle">新增藥物</h2>
+      <form id="medForm">
+        <label>
+          藥物名稱
+          <input type="text" id="medName" required maxlength="40" placeholder="例如：血壓藥 / 維他命C" />
+        </label>
+        <div class="row">
+          <label class="flex2">
+            每次劑量
+            <input type="number" id="medDose" min="0" step="0.5" required placeholder="1" inputmode="decimal" />
+          </label>
+          <label class="flex1">
+            單位
+            <select id="medUnit">
+              <option>顆</option>
+              <option>錠</option>
+              <option>粒</option>
+              <option>包</option>
+              <option>ml</option>
+              <option>mg</option>
+              <option>滴</option>
+              <option>單位</option>
+            </select>
+          </label>
+        </div>
+        <div class="field">
+          <span class="field-label">服用時間（一天可多次）</span>
+          <div id="timesWrap" class="times-wrap"></div>
+          <button type="button" id="addTimeBtn" class="ghost-btn">＋ 增加一個時間</button>
+        </div>
+        <label>
+          備註（選填）
+          <input type="text" id="medNote" maxlength="60" placeholder="例如：飯後服用" />
+        </label>
+        <div class="modal-actions">
+          <button type="button" id="deleteMedBtn" class="danger-btn" hidden>刪除</button>
+          <span class="spacer"></span>
+          <button type="button" id="cancelBtn" class="ghost-btn">取消</button>
+          <button type="submit" class="primary-btn">儲存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="js/logic.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
