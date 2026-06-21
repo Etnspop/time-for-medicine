@@ -15,6 +15,9 @@
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
+/* hidden 屬性一律隱藏，避免被 .modal/.progress-wrap 等的 display 蓋過 */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   padding: 0;

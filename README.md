@@ -56,10 +56,15 @@ npx serve .
 
 ## 開發 / 測試
 
-純前端，無需安裝套件。核心邏輯有單元測試：
+App 本身純前端、不需安裝任何套件即可使用。測試分兩類：
 
 ```bash
+# 核心邏輯單元測試（不需安裝任何東西）
 node --test test/logic.test.js
+
+# 介面 + 功能整合測試（用 jsdom 跑真實 DOM 操作流程，需先安裝 devDependencies）
+npm install
+npm test          # 等同 node --test，會跑 logic + ui 兩組測試
 ```
 
 ### 專案結構
