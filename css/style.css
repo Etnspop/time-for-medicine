@@ -1,16 +1,21 @@
 :root {
-  --teal: #0d9488;
-  --teal-dark: #0f766e;
-  --teal-light: #ccfbf1;
-  --bg: #f1f5f9;
+  /* Tiffany green 為主、柔和粉色為輔的清爽配色 */
+  --teal: #3fc6bd;          /* 淺 Tiffany green（裝飾、邊框、圓點） */
+  --teal-dark: #2bb3aa;     /* 較深 Tiffany（漸層、按下狀態） */
+  --teal-ink: #0e9a90;      /* 可讀的深 Tiffany（白底上的文字、主要按鈕） */
+  --teal-light: #dff6f4;    /* 淡 Tiffany（focus、淡底） */
+  --pink: #f7a8c4;          /* 柔和粉（輔色） */
+  --pink-deep: #ec7daa;     /* 較深粉（重點文字、active 分頁） */
+  --pink-soft: #fdeaf1;     /* 淡粉底 */
+  --bg: #fbf6f8;            /* 帶一點粉的柔白背景 */
   --card: #ffffff;
-  --ink: #0f172a;
-  --muted: #64748b;
-  --line: #e2e8f0;
-  --danger: #dc2626;
-  --amber: #f59e0b;
-  --green: #16a34a;
-  --shadow: 0 1px 3px rgba(15, 23, 42, .08), 0 1px 2px rgba(15, 23, 42, .06);
+  --ink: #4a4a55;           /* 柔和深灰（取代近黑，較不刺眼） */
+  --muted: #9a93a0;         /* 柔和次要文字 */
+  --line: #f0e6ec;          /* 淡粉灰分隔線 */
+  --danger: #e57588;        /* 柔和紅 */
+  --amber: #f3b75e;         /* 柔和琥珀 */
+  --green: #5cc99a;         /* 柔和綠（完成） */
+  --shadow: 0 2px 8px rgba(180, 140, 160, .12), 0 1px 2px rgba(180, 140, 160, .08);
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -35,19 +40,19 @@ body {
 
 /* ---------- Header ---------- */
 .app-header {
-  background: linear-gradient(135deg, var(--teal), var(--teal-dark));
+  background: linear-gradient(135deg, var(--teal-ink) 0%, #34bdb4 45%, var(--pink-deep) 100%);
   color: #fff;
   padding: calc(env(safe-area-inset-top) + 16px) 20px 18px;
   border-radius: 0 0 22px 22px;
-  box-shadow: var(--shadow);
+  box-shadow: 0 4px 14px rgba(236, 125, 170, .18);
   position: sticky;
   top: 0;
   z-index: 10;
 }
 .header-top { display: flex; align-items: center; justify-content: space-between; }
-.brand { font-size: 22px; margin: 0; font-weight: 700; letter-spacing: .5px; }
+.brand { font-size: 22px; margin: 0; font-weight: 700; letter-spacing: .5px; text-shadow: 0 1px 3px rgba(0, 0, 0, .15); }
 .brand-icon { margin-right: 4px; }
-.today-label { margin: 10px 0 0; opacity: .92; font-size: 14px; }
+.today-label { margin: 10px 0 0; opacity: .95; font-size: 14px; text-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
 
 .icon-btn {
   background: rgba(255, 255, 255, .18);
@@ -144,20 +149,20 @@ main { padding: 16px; max-width: 560px; margin: 0 auto; }
 
 /* ---------- Buttons ---------- */
 .primary-btn {
-  background: var(--teal); color: #fff; border: none;
+  background: var(--teal-ink); color: #fff; border: none;
   padding: 12px 18px; border-radius: 12px; font-size: 15px; font-weight: 600;
   cursor: pointer; transition: background .15s, transform .1s;
 }
-.primary-btn:active { transform: scale(.98); background: var(--teal-dark); }
+.primary-btn:active { transform: scale(.98); background: #0b837a; }
 .primary-btn.full { width: 100%; margin-top: 16px; padding: 14px; }
 
 .ghost-btn {
-  background: transparent; color: var(--teal); border: 1px solid var(--line);
+  background: transparent; color: var(--teal-ink); border: 1px solid var(--teal);
   padding: 10px 14px; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer;
 }
-.ghost-btn:active { background: #f8fafc; }
+.ghost-btn:active { background: var(--teal-light); }
 .danger-btn {
-  background: #fef2f2; color: var(--danger); border: 1px solid #fecaca;
+  background: var(--pink-soft); color: var(--danger); border: 1px solid #f7c6d2;
   padding: 10px 14px; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer;
 }
 
@@ -175,8 +180,8 @@ main { padding: 16px; max-width: 560px; margin: 0 auto; }
   display: flex; flex-direction: column; align-items: center; gap: 2px;
   font-size: 12px; font-weight: 600;
 }
-.tab .tab-icon { font-size: 21px; filter: grayscale(1); opacity: .6; }
-.tab.active { color: var(--teal); }
+.tab .tab-icon { font-size: 21px; filter: grayscale(1); opacity: .55; }
+.tab.active { color: var(--pink-deep); }
 .tab.active .tab-icon { filter: none; opacity: 1; }
 
 /* ---------- Modal ---------- */
@@ -338,7 +343,7 @@ main { padding: 16px; max-width: 560px; margin: 0 auto; }
 .rx-head { display: flex; align-items: center; gap: 10px; }
 .rx-title { font-weight: 700; font-size: 16px; flex: 1; min-width: 0; }
 .rx-edit {
-  background: none; border: none; color: var(--teal); font-size: 14px; font-weight: 600;
+  background: none; border: none; color: var(--teal-ink); font-size: 14px; font-weight: 600;
   cursor: pointer; padding: 4px 6px;
 }
 .rx-note { margin: 4px 0 0; }
@@ -352,7 +357,7 @@ main { padding: 16px; max-width: 560px; margin: 0 auto; }
 .refill-row .rf-status { font-size: 12px; color: var(--muted); flex: 1; }
 .refill-row .rf-toggle {
   background: #fff; border: 1px solid var(--line); border-radius: 8px;
-  padding: 6px 10px; font-size: 13px; font-weight: 600; color: var(--teal); cursor: pointer; white-space: nowrap;
+  padding: 6px 10px; font-size: 13px; font-weight: 600; color: var(--teal-ink); cursor: pointer; white-space: nowrap;
 }
 .refill-row .rf-toggle:active { background: #f1f5f9; }
 

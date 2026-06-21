@@ -1,5 +1,5 @@
 /* Service Worker：讓 App 可離線使用，並負責顯示提醒通知 */
-const CACHE = "tfm-v1";
+const CACHE = "tfm-v2";
 const ASSETS = [
   "./",
   "./index.html",
