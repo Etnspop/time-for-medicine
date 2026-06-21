@@ -28,15 +28,35 @@
   <main>
     <!-- 今日 -->
     <section id="view-today" class="view active">
+      <div id="refillBanner" class="banner" hidden></div>
       <div id="todayEmpty" class="empty-state" hidden>
         <div class="empty-emoji">🗓️</div>
         <p>今天沒有需要服用的藥物。</p>
-        <p class="muted">到「我的藥物」新增一筆吧。</p>
+        <p class="muted">到「藥物」新增一筆吧。</p>
       </div>
       <ul id="todayList" class="dose-list"></ul>
     </section>
 
-    <!-- 我的藥物 -->
+    <!-- 紀錄（月曆） -->
+    <section id="view-history" class="view">
+      <div class="cal-head">
+        <button id="calPrev" class="cal-nav" aria-label="上個月">‹</button>
+        <h2 id="calTitle" class="cal-title"></h2>
+        <button id="calNext" class="cal-nav" aria-label="下個月">›</button>
+      </div>
+      <div class="cal-weekdays">
+        <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
+      </div>
+      <div id="calGrid" class="cal-grid"></div>
+      <div class="cal-legend">
+        <span><i class="dot complete"></i>全部完成</span>
+        <span><i class="dot partial"></i>部分</span>
+        <span><i class="dot missed"></i>未服用</span>
+      </div>
+      <div id="dayDetail" class="day-detail" hidden></div>
+    </section>
+
+    <!-- 藥物 -->
     <section id="view-meds" class="view">
       <div id="medsEmpty" class="empty-state" hidden>
         <div class="empty-emoji">💊</div>
@@ -46,14 +66,45 @@
       <ul id="medList" class="med-list"></ul>
       <button id="addMedBtn" class="primary-btn full">＋ 新增藥物</button>
     </section>
+
+    <!-- 更多 -->
+    <section id="view-more" class="view">
+      <div class="settings-group">
+        <h3 class="settings-title">提醒通知</h3>
+        <p class="muted small">到了服用時間，App 會主動跳出通知提醒你。</p>
+        <button id="moreNotifyBtn" class="ghost-btn full">🔔 開啟／測試提醒通知</button>
+      </div>
+
+      <div class="settings-group">
+        <h3 class="settings-title">資料備份</h3>
+        <p class="muted small">所有資料只存在這台裝置。建議定期匯出備份，換手機或清除瀏覽器資料前才不會遺失。</p>
+        <button id="exportBtn" class="ghost-btn full">⬇️ 匯出備份檔（JSON）</button>
+        <button id="importBtn" class="ghost-btn full">⬆️ 從備份檔還原</button>
+        <input type="file" id="importFile" accept="application/json,.json" hidden />
+      </div>
+
+      <div class="settings-group">
+        <h3 class="settings-title">關於</h3>
+        <p class="muted small">
+          吃藥時間是一個純前端的 PWA，沒有帳號、沒有後端、不追蹤你。
+          藥物清單與服藥紀錄只寫進這台裝置的瀏覽器儲存空間。
+        </p>
+      </div>
+    </section>
   </main>
 
   <nav class="tabbar">
     <button class="tab active" data-view="today">
       <span class="tab-icon">✅</span><span>今日</span>
     </button>
+    <button class="tab" data-view="history">
+      <span class="tab-icon">🗓️</span><span>紀錄</span>
+    </button>
     <button class="tab" data-view="meds">
-      <span class="tab-icon">💊</span><span>我的藥物</span>
+      <span class="tab-icon">💊</span><span>藥物</span>
+    </button>
+    <button class="tab" data-view="more">
+      <span class="tab-icon">⚙️</span><span>更多</span>
     </button>
   </nav>
 
@@ -94,6 +145,20 @@
           備註（選填）
           <input type="text" id="medNote" maxlength="60" placeholder="例如：飯後服用" />
         </label>
+        <div class="field refill-field">
+          <span class="field-label">補藥提醒（選填）</span>
+          <div class="row">
+            <label class="flex2">
+              目前剩餘數量
+              <input type="number" id="medStock" min="0" step="1" placeholder="例如：30" inputmode="numeric" />
+            </label>
+            <label class="flex1">
+              低於幾天提醒
+              <input type="number" id="medThreshold" min="0" step="1" placeholder="7" inputmode="numeric" />
+            </label>
+          </div>
+          <p id="stockHint" class="muted small" hidden></p>
+        </div>
         <div class="modal-actions">
           <button type="button" id="deleteMedBtn" class="danger-btn" hidden>刪除</button>
           <span class="spacer"></span>

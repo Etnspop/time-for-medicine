@@ -86,3 +86,68 @@ test("空資料不會出錯", () => {
   assert.deepStrictEqual(T.todaysDoses(undefined), []);
   assert.deepStrictEqual(T.computeDue([], "10:00", [], []), []);
 });
+
+// ---------- 歷史 / 月曆 ----------
+
+const created = new Date(2026, 5, 10).getTime(); // 2026-06-10
+const medsH = [
+  { id: "a", name: "血壓藥", dose: 1, unit: "顆", times: ["08:00", "20:00"], createdAt: created },
+  { id: "b", name: "維他命C", dose: 1, unit: "錠", times: ["08:00"], createdAt: created },
+];
+
+test("scheduledDosesForDate：建立日之前的日期不計入", () => {
+  assert.strictEqual(T.scheduledDosesForDate(medsH, "2026-06-09").length, 0); // 早於建立日
+  assert.strictEqual(T.scheduledDosesForDate(medsH, "2026-06-10").length, 3); // 當天起算
+  assert.strictEqual(T.scheduledDosesForDate(medsH, "2026-06-21").length, 3);
+});
+
+test("dayStatus：各種狀態", () => {
+  const today = "2026-06-21";
+  // 未來
+  assert.strictEqual(T.dayStatus(medsH, {}, "2026-06-22", today).status, "future");
+  // 建立日前 → empty
+  assert.strictEqual(T.dayStatus(medsH, {}, "2026-06-09", today).status, "empty");
+  // 過去全沒吃 → missed
+  assert.strictEqual(T.dayStatus(medsH, {}, "2026-06-15", today).status, "missed");
+  // 過去部分 → partial
+  let logs = { "2026-06-15": { "a|08:00": "x" } };
+  assert.strictEqual(T.dayStatus(medsH, logs, "2026-06-15", today).status, "partial");
+  // 過去全吃 → complete
+  logs = { "2026-06-15": { "a|08:00": "x", "a|20:00": "x", "b|08:00": "x" } };
+  let r = T.dayStatus(medsH, logs, "2026-06-15", today);
+  assert.deepStrictEqual([r.status, r.taken, r.expected], ["complete", 3, 3]);
+  // 今天未完成 → today-pending
+  assert.strictEqual(T.dayStatus(medsH, {}, today, today).status, "today-pending");
+});
+
+test("buildMonth：6 週 42 格、含當月與鄰月", () => {
+  const cells = T.buildMonth(2026, 5); // 2026 年 6 月
+  assert.strictEqual(cells.length, 42);
+  const inMonth = cells.filter((c) => c.inMonth);
+  assert.strictEqual(inMonth.length, 30); // 六月 30 天
+  assert.strictEqual(inMonth[0].dateKey, "2026-06-01");
+  assert.strictEqual(inMonth[29].dateKey, "2026-06-30");
+});
+
+// ---------- 庫存 / 補藥提醒 ----------
+
+test("dailyConsumption：每次劑量 × 一天次數", () => {
+  assert.strictEqual(T.dailyConsumption({ dose: 2, times: ["08:00", "20:00"] }), 4);
+  assert.strictEqual(T.dailyConsumption({ dose: 1, times: [] }), 0);
+});
+
+test("daysLeft：庫存可撐天數，無庫存回 null", () => {
+  assert.strictEqual(T.daysLeft({ dose: 1, times: ["08:00", "20:00"], stock: 10 }), 5);
+  assert.strictEqual(T.daysLeft({ dose: 1, times: ["08:00"], stock: 7 }), 7);
+  assert.strictEqual(T.daysLeft({ dose: 1, times: ["08:00"] }), null); // 未設庫存
+  assert.strictEqual(T.daysLeft({ dose: 1, times: ["08:00"], stock: "" }), null);
+  assert.strictEqual(T.daysLeft({ dose: 1, times: [], stock: 5 }), null); // 無服用時間
+});
+
+test("isLowStock：低於門檻才算偏低", () => {
+  assert.strictEqual(T.isLowStock({ dose: 1, times: ["08:00"], stock: 5 }), true);  // 5 天 <=7
+  assert.strictEqual(T.isLowStock({ dose: 1, times: ["08:00"], stock: 30 }), false); // 30 天
+  assert.strictEqual(T.isLowStock({ dose: 1, times: ["08:00"], stock: 3, lowThreshold: 2 }), false);
+  assert.strictEqual(T.isLowStock({ dose: 1, times: ["08:00"], stock: 2, lowThreshold: 2 }), true);
+  assert.strictEqual(T.isLowStock({ dose: 1, times: ["08:00"] }), false); // 未追蹤
+});

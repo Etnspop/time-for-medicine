@@ -38,6 +38,17 @@
   const escapeHtml = T.escapeHtml;
   const doseId = T.doseId;
 
+  // 月曆狀態
+  const _now = new Date();
+  let calYear = _now.getFullYear();
+  let calMonth = _now.getMonth();
+  let selectedDay = null;
+
+  function fmtDateZh(key) {
+    const [y, m, dd] = key.split("-").map(Number);
+    return `${m} 月 ${dd} 日（週${weekdayZh(new Date(y, m - 1, dd))}）`;
+  }
+
   let toastTimer = null;
   function toast(msg) {
     const el = $("#toast");
@@ -64,12 +75,36 @@
     saveLogs();
   }
 
+  // 勾選/取消時調整庫存（只有「今日」的勾選會影響庫存）
+  function adjustStockForToggle(d, taken) {
+    const m = meds.find((x) => x.id === d.medId);
+    if (!m || m.stock == null || m.stock === "") return;
+    const dose = Number(m.dose) || 0;
+    const next = (Number(m.stock) || 0) + (taken ? -dose : dose);
+    m.stock = Math.max(0, next);
+    saveMeds();
+  }
+
+  // ---------- 畫面：補藥提醒橫幅 ----------
+  function renderRefillBanner() {
+    const banner = $("#refillBanner");
+    const low = meds.filter(T.isLowStock);
+    if (low.length === 0) { banner.hidden = true; return; }
+    const items = low.map((m) => {
+      const dl = T.daysLeft(m);
+      return `<b>${escapeHtml(m.name)}</b>（約剩 ${dl} 天 · 庫存 ${m.stock} ${escapeHtml(m.unit)}）`;
+    }).join("、");
+    banner.innerHTML = `<span class="banner-title">🔔 該補藥囉</span>以下藥物快用完了：${items}`;
+    banner.hidden = false;
+  }
+
   // ---------- 畫面：今日 ----------
   function renderToday() {
     const d = new Date();
     $("#todayLabel").textContent =
       `${d.getFullYear()} 年 ${d.getMonth() + 1} 月 ${d.getDate()} 日（週${weekdayZh(d)}）`;
 
+    renderRefillBanner();
     const doses = todaysDoses();
     const list = $("#todayList");
     const empty = $("#todayEmpty");
@@ -106,6 +141,7 @@
       li.querySelector(".check").addEventListener("click", () => {
         const willTake = !taken;
         setTaken(d0, willTake);
+        adjustStockForToggle(d0, willTake);
         renderAll();
         toast(willTake ? `已服用：${d0.name} ${d0.time}` : "已取消勾選");
       });
@@ -133,11 +169,17 @@
       li.className = "med-card";
       const times = (m.times || []).slice().sort().join("、") || "未設定時間";
       const noteHtml = m.note ? ` · ${escapeHtml(m.note)}` : "";
+      const tracked = m.stock != null && m.stock !== "";
+      const low = T.isLowStock(m);
+      const stockHtml = tracked
+        ? `<div class="m-sub">${low ? "⚠️ " : "📦 "}庫存 ${m.stock} ${escapeHtml(m.unit)}（約 ${T.daysLeft(m)} 天）</div>`
+        : "";
       li.innerHTML = `
         <span class="pill-dot"></span>
         <div class="m-info">
           <div class="m-name">${escapeHtml(m.name)}</div>
           <div class="m-sub">${escapeHtml(fmtDose(m))} · 每日 ${m.times.length} 次（${escapeHtml(times)}）${noteHtml}</div>
+          ${stockHtml}
         </div>
         <span class="chev">›</span>`;
       li.addEventListener("click", () => openModal(m.id));
@@ -145,7 +187,58 @@
     });
   }
 
-  function renderAll() { renderToday(); renderMeds(); }
+  // ---------- 畫面：紀錄（月曆） ----------
+  function renderCalendar() {
+    $("#calTitle").textContent = `${calYear} 年 ${calMonth + 1} 月`;
+    const grid = $("#calGrid");
+    grid.innerHTML = "";
+    const today = todayKey();
+    T.buildMonth(calYear, calMonth).forEach((c) => {
+      const div = document.createElement("div");
+      if (!c.inMonth) { div.className = "cal-cell out"; grid.appendChild(div); return; }
+      const st = T.dayStatus(meds, logs, c.dateKey, today);
+      const dotClass = ["complete", "partial", "missed", "today-pending"].includes(st.status)
+        ? st.status : "";
+      div.className = "cal-cell" +
+        (c.dateKey === today ? " today" : "") +
+        (c.dateKey === selectedDay ? " selected" : "");
+      div.innerHTML = `<span>${c.day}</span><span class="cdot ${dotClass}"></span>`;
+      div.addEventListener("click", () => {
+        selectedDay = c.dateKey;
+        renderCalendar();
+        renderDayDetail(c.dateKey);
+      });
+      grid.appendChild(div);
+    });
+  }
+
+  function renderDayDetail(dateKey) {
+    const box = $("#dayDetail");
+    const scheduled = T.scheduledDosesForDate(meds, dateKey);
+    if (scheduled.length === 0) {
+      box.hidden = false;
+      box.innerHTML = `<h4>${fmtDateZh(dateKey)}</h4><p class="muted small">這天沒有排定服藥。</p>`;
+      return;
+    }
+    const dayLog = logs[dateKey] || {};
+    const rows = scheduled.map((d) => {
+      const ts = dayLog[doseId(d)];
+      const mark = ts ? `<span class="d-mark yes">✓</span>` : `<span class="d-mark no">○</span>`;
+      return `<div class="d-row">
+        <span class="d-time">${d.time}</span>
+        <span class="d-name">${escapeHtml(d.name)}（${escapeHtml(d.dose)}）</span>
+        ${mark}</div>`;
+    }).join("");
+    box.hidden = false;
+    box.innerHTML = `<h4>${fmtDateZh(dateKey)}</h4>${rows}`;
+  }
+
+  function renderHistory() {
+    renderCalendar();
+    if (selectedDay) renderDayDetail(selectedDay);
+  }
+
+  function renderAll() { renderToday(); renderMeds(); renderHistory(); }
 
   // ---------- 新增 / 編輯彈窗 ----------
   let editingId = null;
@@ -174,6 +267,8 @@
       $("#medDose").value = m.dose;
       $("#medUnit").value = m.unit;
       $("#medNote").value = m.note || "";
+      $("#medStock").value = m.stock != null ? m.stock : "";
+      $("#medThreshold").value = m.lowThreshold != null ? m.lowThreshold : "";
       (m.times.length ? m.times : ["08:00"]).forEach(addTimeChip);
       $("#deleteMedBtn").hidden = false;
     } else {
@@ -181,7 +276,19 @@
       addTimeChip("08:00");
       $("#deleteMedBtn").hidden = true;
     }
+    updateStockHint();
     $("#medModal").hidden = false;
+  }
+
+  // 即時顯示「庫存約可服用幾天」
+  function updateStockHint() {
+    const hint = $("#stockHint");
+    const stock = $("#medStock").value.trim();
+    if (stock === "") { hint.hidden = true; return; }
+    const perDay = (Number($("#medDose").value) || 0) * collectTimes().length;
+    if (perDay <= 0) { hint.hidden = true; return; }
+    hint.textContent = `目前庫存約可服用 ${Math.floor(Number(stock) / perDay)} 天`;
+    hint.hidden = false;
   }
 
   function closeModal() { $("#medModal").hidden = true; editingId = null; }
@@ -200,16 +307,20 @@
     const unit = $("#medUnit").value;
     const note = $("#medNote").value.trim();
     const times = collectTimes();
+    const stockRaw = $("#medStock").value.trim();
+    const stock = stockRaw === "" ? null : Math.max(0, Number(stockRaw));
+    const thrRaw = $("#medThreshold").value.trim();
+    const lowThreshold = thrRaw === "" ? null : Math.max(0, Number(thrRaw));
 
     if (!name) { toast("請輸入藥物名稱"); return; }
     if (times.length === 0) { toast("請至少設定一個服用時間"); return; }
 
     if (editingId) {
       const m = meds.find((x) => x.id === editingId);
-      Object.assign(m, { name, dose, unit, note, times });
+      Object.assign(m, { name, dose, unit, note, times, stock, lowThreshold });
       toast("已更新藥物");
     } else {
-      meds.push({ id: uid(), name, dose, unit, note, times, createdAt: Date.now() });
+      meds.push({ id: uid(), name, dose, unit, note, times, stock, lowThreshold, createdAt: Date.now() });
       toast("已新增藥物");
     }
     saveMeds();
@@ -325,6 +436,53 @@
     } else if (due.length > 1) {
       showNotification("💊 該吃藥囉", `你有 ${due.length} 項藥物到了服用時間，快打開確認吧。`);
     }
+
+    // 補藥提醒：每天最多通知一次
+    const lowMeds = meds.filter(T.isLowStock);
+    if (lowMeds.length && !notified.includes("refill")) {
+      markNotified("refill");
+      showNotification("🔔 該補藥囉", `${lowMeds.map((m) => m.name).join("、")} 快用完了，記得補充。`);
+    }
+  }
+
+  // ---------- 匯出 / 匯入備份 ----------
+  function exportData() {
+    const data = {
+      app: "time-for-medicine", version: 1,
+      exportedAt: new Date().toISOString(), meds, logs,
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `吃藥時間-備份-${todayKey()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast("已匯出備份檔");
+  }
+
+  function importData(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        if (!data || !Array.isArray(data.meds)) throw new Error("格式不符");
+        if (!confirm(`這會以備份內容「取代」目前資料（${data.meds.length} 種藥物）。確定還原嗎？`)) return;
+        meds = data.meds;
+        logs = data.logs && typeof data.logs === "object" ? data.logs : {};
+        saveMeds();
+        saveLogs();
+        selectedDay = null;
+        $("#dayDetail").hidden = true;
+        renderAll();
+        toast("已從備份還原");
+      } catch (e) {
+        toast("無法讀取此備份檔");
+      }
+    };
+    reader.readAsText(file);
   }
 
   // ---------- 啟動 ----------
@@ -335,13 +493,35 @@
 
     // 藥物表單
     $("#addMedBtn").addEventListener("click", () => openModal());
-    $("#addTimeBtn").addEventListener("click", () => addTimeChip("12:00"));
+    $("#addTimeBtn").addEventListener("click", () => { addTimeChip("12:00"); updateStockHint(); });
     $("#cancelBtn").addEventListener("click", closeModal);
     $("#deleteMedBtn").addEventListener("click", deleteMed);
     $("#medForm").addEventListener("submit", submitMed);
     $("#medModal").addEventListener("click", (e) => {
       if (e.target.id === "medModal") closeModal();
     });
+    $("#medStock").addEventListener("input", updateStockHint);
+    $("#medDose").addEventListener("input", updateStockHint);
+
+    // 月曆切換月份
+    $("#calPrev").addEventListener("click", () => {
+      if (--calMonth < 0) { calMonth = 11; calYear--; }
+      selectedDay = null; $("#dayDetail").hidden = true; renderCalendar();
+    });
+    $("#calNext").addEventListener("click", () => {
+      if (++calMonth > 11) { calMonth = 0; calYear++; }
+      selectedDay = null; $("#dayDetail").hidden = true; renderCalendar();
+    });
+
+    // 更多：備份與通知
+    $("#exportBtn").addEventListener("click", exportData);
+    $("#importBtn").addEventListener("click", () => $("#importFile").click());
+    $("#importFile").addEventListener("change", (e) => {
+      const f = e.target.files[0];
+      if (f) importData(f);
+      e.target.value = "";
+    });
+    $("#moreNotifyBtn").addEventListener("click", toggleNotify);
 
     // 通知
     $("#notifyBtn").addEventListener("click", toggleNotify);
