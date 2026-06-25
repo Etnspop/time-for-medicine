@@ -1,0 +1,15 @@
+{
+  "name": "time-for-medicine-push",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker：吃藥時間 App 的 Web Push 後端（只存裝置端點＋提醒時間）",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test",
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev"
+  },
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}

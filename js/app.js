@@ -391,6 +391,7 @@
     saveMeds();
     closeModal();
     renderAll();
+    syncPush();
   }
 
   function deleteMed() {
@@ -401,6 +402,7 @@
     saveMeds();
     closeModal();
     renderAll();
+    syncPush();
     toast("已刪除");
   }
 
@@ -573,6 +575,109 @@
     }
   }
 
+  // ---------- 背景推播（Web Push，需搭配 server/ 的 Cloudflare Worker） ----------
+  const PUSH_CFG = window.PUSH_CONFIG || {};
+
+  function pushSupported() {
+    return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  }
+  function pushConfigured() {
+    return !!(PUSH_CFG.workerUrl && PUSH_CFG.vapidPublicKey);
+  }
+  function deviceTz() {
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"; }
+    catch (_) { return "UTC"; }
+  }
+  function urlB64ToUint8Array(base64) {
+    const padding = "=".repeat((4 - (base64.length % 4)) % 4);
+    const b64 = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const raw = atob(b64);
+    const out = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+  async function getPushSub() {
+    if (!pushSupported()) return null;
+    const reg = await navigator.serviceWorker.ready;
+    return reg.pushManager.getSubscription();
+  }
+  function postToWorker(path, payload) {
+    return fetch(PUSH_CFG.workerUrl.replace(/\/$/, "") + path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  }
+  async function enablePush() {
+    if (!pushSupported()) { toast("此裝置/瀏覽器不支援背景推播"); return; }
+    if (!pushConfigured()) { toast("尚未設定推播伺服器（見 server/SETUP.md）"); return; }
+    if (Notification.permission !== "granted") {
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") { toast("需要允許通知才能啟用"); return; }
+    }
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlB64ToUint8Array(PUSH_CFG.vapidPublicKey),
+      });
+      const res = await postToWorker("/subscribe", {
+        subscription: sub.toJSON(), times: T.uniqueDoseTimes(meds), tz: deviceTz(),
+      });
+      if (!res.ok) throw new Error("server");
+      toast("已啟用背景推播！");
+    } catch (e) {
+      toast("啟用失敗，請確認伺服器設定");
+    }
+    updatePushUI();
+  }
+  async function disablePush() {
+    try {
+      const sub = await getPushSub();
+      if (sub) {
+        if (pushConfigured()) await postToWorker("/unsubscribe", { endpoint: sub.endpoint }).catch(() => {});
+        await sub.unsubscribe();
+      }
+      toast("已關閉背景推播");
+    } catch (e) { /* ignore */ }
+    updatePushUI();
+  }
+  // 藥物時間有變動時，更新伺服器上的排程（若已訂閱）
+  async function syncPush() {
+    if (!pushSupported() || !pushConfigured()) return;
+    try {
+      const sub = await getPushSub();
+      if (sub) postToWorker("/subscribe", {
+        subscription: sub.toJSON(), times: T.uniqueDoseTimes(meds), tz: deviceTz(),
+      }).catch(() => {});
+    } catch (e) { /* ignore */ }
+  }
+  async function updatePushUI() {
+    const group = $("#pushGroup");
+    if (!group) return;
+    const btn = $("#pushBtn");
+    const status = $("#pushStatus");
+    if (!pushSupported()) {
+      status.textContent = "此裝置或瀏覽器不支援背景推播（App 內提醒仍可使用）。";
+      btn.disabled = true; btn.textContent = "無法使用"; btn.onclick = null;
+      return;
+    }
+    if (!pushConfigured()) {
+      status.textContent = "尚未設定推播伺服器（見 server/SETUP.md）。設定前仍可使用 App 內提醒。";
+      btn.disabled = true; btn.textContent = "尚未設定伺服器"; btn.onclick = null;
+      return;
+    }
+    btn.disabled = false;
+    const sub = await getPushSub();
+    if (sub) {
+      status.textContent = "背景推播已啟用：關閉 App 也會在服藥時間提醒你。";
+      btn.textContent = "關閉背景推播"; btn.onclick = disablePush;
+    } else {
+      status.textContent = "尚未啟用。";
+      btn.textContent = "啟用背景推播"; btn.onclick = enablePush;
+    }
+  }
+
   // 提醒紀錄：每天一個物件 { "<doseId>": 上次提醒毫秒, "rx|<id>": true }
   function getRemindMap() {
     const all = store.read(KEY_NOTIFIED, {});
@@ -739,6 +844,7 @@
     // 通知
     $("#notifyBtn").addEventListener("click", toggleNotify);
     refreshNotifyBtn();
+    updatePushUI();
 
     renderAll();
 

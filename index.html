@@ -96,6 +96,17 @@
         </label>
       </div>
 
+      <div class="settings-group" id="pushGroup">
+        <h3 class="settings-title">背景推播（關閉也能提醒）</h3>
+        <p class="muted small">
+          一般提醒只在 App 開著或在背景時運作。開啟背景推播後，即使完全關閉 App，
+          到了服藥時間手機也會收到通知。需先依
+          <code>server/SETUP.md</code> 部署推播伺服器。
+        </p>
+        <p id="pushStatus" class="muted small"></p>
+        <button id="pushBtn" class="ghost-btn full">啟用背景推播</button>
+      </div>
+
       <div class="settings-group">
         <h3 class="settings-title">資料備份</h3>
         <p class="muted small">所有資料只存在這台裝置。建議定期匯出備份，換手機或清除瀏覽器資料前才不會遺失。</p>
@@ -211,6 +222,7 @@
   <div id="toast" class="toast" hidden></div>
 
   <script src="js/logic.js"></script>
+  <script src="js/push-config.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

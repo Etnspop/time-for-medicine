@@ -264,6 +264,15 @@ test("重複提醒設定：重開 App 會載回先前的開關狀態", () => {
   assert.strictEqual($(w, "#repeatToggle").checked, false, "應載回關閉狀態");
 });
 
+test("背景推播：未設定伺服器時顯示提示且按鈕停用（不影響 App 內提醒）", () => {
+  const w = boot(); // boot 不載入 push-config.js，等同尚未設定
+  const group = $(w, "#pushGroup");
+  assert.ok(group, "應有背景推播設定區塊");
+  const btn = $(w, "#pushBtn");
+  assert.strictEqual(btn.disabled, true, "未設定時按鈕應停用");
+  assert.match($(w, "#pushStatus").textContent, /不支援|尚未設定/);
+});
+
 // ---------- CSS 回歸：hidden 一定隱藏 ----------
 
 test("CSS：存在 [hidden] display:none !important 規則（修正彈窗常駐 bug）", () => {

@@ -93,6 +93,13 @@
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }
 
+  // 彙整所有藥物的服用時間，去重並排序（給背景推播排程用）
+  function uniqueDoseTimes(meds) {
+    const set = new Set();
+    (meds || []).forEach((m) => (m.times || []).forEach((t) => { if (t) set.add(t); }));
+    return [...set].sort();
+  }
+
   // ---------- 歷史 / 月曆 ----------
 
   // 由毫秒時間戳取得當地日期字串 YYYY-MM-DD
@@ -194,7 +201,7 @@
   }
 
   return {
-    pad, todayKey, hm, weekdayZh, fmtDose, doseId, todaysDoses, computeDue, computeReminders, progress, escapeHtml,
+    pad, todayKey, hm, weekdayZh, fmtDose, doseId, todaysDoses, computeDue, computeReminders, progress, escapeHtml, uniqueDoseTimes,
     dateKeyOf, scheduledDosesForDate, dayStatus, buildMonth,
     daysUntil, refillStatus, activeRefillAlerts,
   };

@@ -1,10 +1,11 @@
 /* Service Worker：讓 App 可離線使用，並負責顯示提醒通知 */
-const CACHE = "tfm-v3";
+const CACHE = "tfm-v4";
 const ASSETS = [
   "./",
   "./index.html",
   "./css/style.css",
   "./js/logic.js",
+  "./js/push-config.js",
   "./js/app.js",
   "./manifest.json",
   "./icons/icon-192.png",
@@ -35,6 +36,24 @@ self.addEventListener("fetch", (e) => {
         return res;
       }).catch(() => cached)
     )
+  );
+});
+
+// 背景推播：即使 App 關閉，收到伺服器推播時也會跳通知
+self.addEventListener("push", (e) => {
+  let data = {};
+  try { data = e.data ? e.data.json() : {}; } catch (_) {}
+  const title = data.title || "💊 吃藥提醒";
+  const body = data.body || "到吃藥時間了，打開 App 確認今天的藥。";
+  e.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      icon: "icons/icon-192.png",
+      badge: "icons/icon-192.png",
+      tag: "tfm-push",
+      renotify: true,
+      vibrate: [120, 60, 120],
+    })
   );
 });
 

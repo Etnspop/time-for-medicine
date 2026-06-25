@@ -1,0 +1,21 @@
+# Cloudflare Worker 設定 —— 詳細部署步驟見 server/SETUP.md
+name = "time-for-medicine-push"
+main = "src/index.js"
+compatibility_date = "2024-09-01"
+
+# 每分鐘檢查一次有沒有人到了服藥時間
+[triggers]
+crons = ["* * * * *"]
+
+# 存放訂閱的 KV（用 `wrangler kv namespace create SUBS` 建立後，把 id 貼到這裡）
+[[kv_namespaces]]
+binding = "SUBS"
+id = "請貼上你的 KV namespace id"
+
+[vars]
+# VAPID 公鑰可公開（前端也會用到同一把）
+VAPID_PUBLIC_KEY = "請貼上你的 VAPID 公鑰"
+VAPID_SUBJECT = "mailto:you@example.com"
+
+# 注意：VAPID 私鑰不要寫在這裡，請用：
+#   wrangler secret put VAPID_PRIVATE_KEY

@@ -111,6 +111,17 @@ test("progress 計算已服用比例", () => {
   assert.deepStrictEqual(T.progress([], []), { done: 0, total: 0, pct: 0 });
 });
 
+test("uniqueDoseTimes：彙整所有藥物時間、去重排序", () => {
+  const meds = [
+    { id: "a", times: ["20:00", "08:00"] },
+    { id: "b", times: ["08:00", "12:00"] },
+    { id: "c", times: [] },
+  ];
+  assert.deepStrictEqual(T.uniqueDoseTimes(meds), ["08:00", "12:00", "20:00"]);
+  assert.deepStrictEqual(T.uniqueDoseTimes([]), []);
+  assert.deepStrictEqual(T.uniqueDoseTimes(undefined), []);
+});
+
 test("escapeHtml 防止 HTML 注入", () => {
   assert.strictEqual(
     T.escapeHtml('<img src=x onerror="alert(1)">'),
