@@ -655,16 +655,14 @@
   async function updatePushUI() {
     const group = $("#pushGroup");
     if (!group) return;
+    // 尚未設定推播伺服器 → 整個區塊先隱藏，等填好 push-config.js 才顯示
+    if (!pushConfigured()) { group.hidden = true; return; }
+    group.hidden = false;
     const btn = $("#pushBtn");
     const status = $("#pushStatus");
     if (!pushSupported()) {
       status.textContent = "此裝置或瀏覽器不支援背景推播（App 內提醒仍可使用）。";
       btn.disabled = true; btn.textContent = "無法使用"; btn.onclick = null;
-      return;
-    }
-    if (!pushConfigured()) {
-      status.textContent = "尚未設定推播伺服器（見 server/SETUP.md）。設定前仍可使用 App 內提醒。";
-      btn.disabled = true; btn.textContent = "尚未設定伺服器"; btn.onclick = null;
       return;
     }
     btn.disabled = false;

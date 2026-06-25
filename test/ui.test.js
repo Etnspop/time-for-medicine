@@ -264,13 +264,11 @@ test("重複提醒設定：重開 App 會載回先前的開關狀態", () => {
   assert.strictEqual($(w, "#repeatToggle").checked, false, "應載回關閉狀態");
 });
 
-test("背景推播：未設定伺服器時顯示提示且按鈕停用（不影響 App 內提醒）", () => {
+test("背景推播：未設定伺服器時整個區塊隱藏（不顯示提示、不影響其他功能）", () => {
   const w = boot(); // boot 不載入 push-config.js，等同尚未設定
-  const group = $(w, "#pushGroup");
-  assert.ok(group, "應有背景推播設定區塊");
-  const btn = $(w, "#pushBtn");
-  assert.strictEqual(btn.disabled, true, "未設定時按鈕應停用");
-  assert.match($(w, "#pushStatus").textContent, /不支援|尚未設定/);
+  assert.strictEqual($(w, "#pushGroup").hidden, true, "未設定時背景推播區塊應隱藏");
+  // 其他「更多」頁內容仍在
+  assert.ok($(w, "#exportBtn"), "備份按鈕仍應存在");
 });
 
 // ---------- CSS 回歸：hidden 一定隱藏 ----------
