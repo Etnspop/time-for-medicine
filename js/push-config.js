@@ -7,5 +7,5 @@
  */
 window.PUSH_CONFIG = {
   workerUrl: "",
-  vapidPublicKey: "",
+  vapidPublicKey: "BL7TBi-jsCi5yXeVaxmV5cC5bowKk1Zd-kTF_DOrDlCN0_JC1ihQfV1oGE0g6Oc59p4CZzEGminB7mW-6HfpCDA",
 };

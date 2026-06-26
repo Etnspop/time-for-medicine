@@ -13,8 +13,8 @@ binding = "SUBS"
 id = "請貼上你的 KV namespace id"
 
 [vars]
-# VAPID 公鑰可公開（前端也會用到同一把）
-VAPID_PUBLIC_KEY = "請貼上你的 VAPID 公鑰"
+# VAPID 公鑰可公開（前端也會用到同一把）— 已幫你填好
+VAPID_PUBLIC_KEY = "BL7TBi-jsCi5yXeVaxmV5cC5bowKk1Zd-kTF_DOrDlCN0_JC1ihQfV1oGE0g6Oc59p4CZzEGminB7mW-6HfpCDA"
 VAPID_SUBJECT = "mailto:you@example.com"
 
 # 注意：VAPID 私鑰不要寫在這裡，請用：
