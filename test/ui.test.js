@@ -271,6 +271,46 @@ test("背景推播：未設定伺服器時整個區塊隱藏（不顯示提示�
   assert.ok($(w, "#exportBtn"), "備份按鈕仍應存在");
 });
 
+test("補登：在紀錄月曆把過去某天的藥補打勾（並可取消）", () => {
+  const dom = new JSDOM(htmlSrc, {
+    url: "https://example.org/", runScripts: "outside-only", pretendToBeVisual: true,
+  });
+  const w = dom.window;
+  w.setInterval = () => 0; w.setTimeout = () => 0; w.confirm = () => true;
+  const created = Date.now() - 60 * 86400000; // 60 天前建立，當月每天都算有排藥
+  w.localStorage.setItem("tfm.meds.v1", JSON.stringify([
+    { id: "m1", name: "血壓藥", dose: 1, unit: "顆", note: "", times: ["08:00"], createdAt: created },
+  ]));
+  w.eval(logicSrc); w.eval(appSrc);
+  w.document.dispatchEvent(new w.Event("DOMContentLoaded"));
+
+  // 切到「紀錄」分頁，點當月 1 號
+  $$(w, ".tab").find((t) => t.dataset.view === "history").click();
+  const cell = $$(w, "#calGrid .cal-cell:not(.out)")
+    .find((c) => c.querySelector("span") && c.querySelector("span").textContent === "1");
+  assert.ok(cell, "應有當月 1 號格子");
+  cell.click();
+
+  const now = new Date();
+  const tk = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+
+  // 過去日期應出現可補勾的按鈕
+  const check = $(w, "#dayDetail .d-check");
+  assert.ok(check, "過去日期應有可補勾的按鈕");
+  assert.strictEqual(check.classList.contains("on"), false);
+
+  // 補勾 → 寫入該日紀錄
+  check.click();
+  let logs = JSON.parse(w.localStorage.getItem("tfm.logs.v1"));
+  assert.ok(logs[tk] && logs[tk]["m1|08:00"], "補勾後該日應記為已服用");
+  assert.strictEqual($(w, "#dayDetail .d-check").classList.contains("on"), true);
+
+  // 再點一次 → 取消
+  $(w, "#dayDetail .d-check").click();
+  logs = JSON.parse(w.localStorage.getItem("tfm.logs.v1"));
+  assert.ok(!(logs[tk] && logs[tk]["m1|08:00"]), "取消後該日紀錄應移除");
+});
+
 // ---------- CSS 回歸：hidden 一定隱藏 ----------
 
 test("CSS：存在 [hidden] display:none !important 規則（修正彈窗常駐 bug）", () => {

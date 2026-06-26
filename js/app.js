@@ -74,12 +74,15 @@
   function isTaken(d, dayKey = todayKey()) {
     return !!(logs[dayKey] && logs[dayKey][doseId(d)]);
   }
-  function setTaken(d, taken) {
-    const k = todayKey();
-    if (!logs[k]) logs[k] = {};
-    if (taken) logs[k][doseId(d)] = new Date().toISOString();
-    else delete logs[k][doseId(d)];
+  // 寫入/取消某一天的服用紀錄（可補登過去日期）
+  function setTakenForDate(d, dateKey, taken) {
+    if (!logs[dateKey]) logs[dateKey] = {};
+    if (taken) logs[dateKey][doseId(d)] = new Date().toISOString();
+    else delete logs[dateKey][doseId(d)];
     saveLogs();
+  }
+  function setTaken(d, taken) {
+    setTakenForDate(d, todayKey(), taken);
   }
 
   // 把 "YYYY-MM-DD" 顯示成 "M/D"
@@ -221,22 +224,45 @@
   function renderDayDetail(dateKey) {
     const box = $("#dayDetail");
     const scheduled = T.scheduledDosesForDate(meds, dateKey);
+    box.hidden = false;
     if (scheduled.length === 0) {
-      box.hidden = false;
       box.innerHTML = `<h4>${fmtDateZh(dateKey)}</h4><p class="muted small">這天沒有排定服藥。</p>`;
       return;
     }
+    // 今天（含）以前可以補勾／取消；未來日期唯讀
+    const editable = dateKey <= todayKey();
     const dayLog = logs[dateKey] || {};
     const rows = scheduled.map((d) => {
-      const ts = dayLog[doseId(d)];
-      const mark = ts ? `<span class="d-mark yes">✓</span>` : `<span class="d-mark no">○</span>`;
-      return `<div class="d-row">
+      const id = doseId(d);
+      const taken = !!dayLog[id];
+      const mark = editable
+        ? `<button type="button" class="d-check${taken ? " on" : ""}" data-id="${escapeHtml(id)}" aria-label="切換已服用">✓</button>`
+        : (taken ? `<span class="d-mark yes">✓</span>` : `<span class="d-mark no">○</span>`);
+      return `<div class="d-row${taken ? " taken" : ""}">
         <span class="d-time">${d.time}</span>
         <span class="d-name">${escapeHtml(d.name)}（${escapeHtml(d.dose)}）</span>
         ${mark}</div>`;
     }).join("");
-    box.hidden = false;
-    box.innerHTML = `<h4>${fmtDateZh(dateKey)}</h4>${rows}`;
+    const hint = editable
+      ? `<p class="muted small detail-hint">忘了勾選嗎？點右邊的圈圈就能補登。</p>`
+      : "";
+    box.innerHTML = `<h4>${fmtDateZh(dateKey)}</h4>${hint}${rows}`;
+
+    if (editable) {
+      box.querySelectorAll(".d-check").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const id = btn.dataset.id;
+          const d = scheduled.find((x) => doseId(x) === id);
+          if (!d) return;
+          const willTake = !(logs[dateKey] && logs[dateKey][id]);
+          setTakenForDate(d, dateKey, willTake);
+          renderCalendar();
+          renderDayDetail(dateKey);
+          if (dateKey === todayKey()) renderToday();
+          toast(willTake ? "已補登完成" : "已取消");
+        });
+      });
+    }
   }
 
   function renderHistory() {

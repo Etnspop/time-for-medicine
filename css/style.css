@@ -415,3 +415,15 @@ code {
   padding: 1px 6px; border-radius: 6px; font-size: 12px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
+
+/* 紀錄明細：可補勾的圓圈 */
+.detail-hint { margin: 0 0 10px; }
+.d-check {
+  width: 28px; height: 28px; border-radius: 50%;
+  border: 2px solid var(--line); background: #fff;
+  display: grid; place-items: center; cursor: pointer; flex-shrink: 0;
+  font-size: 15px; color: transparent; transition: all .15s;
+}
+.d-check:active { transform: scale(.9); }
+.d-check.on { background: var(--green); border-color: var(--green); color: #fff; }
+.day-detail .d-row.taken .d-name { color: var(--muted); }
