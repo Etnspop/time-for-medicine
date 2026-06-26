@@ -6,6 +6,6 @@
  *   - vapidPublicKey：你產生的 VAPID 公鑰（base64url）
  */
 window.PUSH_CONFIG = {
-  workerUrl: "",
+  workerUrl: "https://timeformedicinepush.shiningoofinger.workers.dev",
   vapidPublicKey: "BL7TBi-jsCi5yXeVaxmV5cC5bowKk1Zd-kTF_DOrDlCN0_JC1ihQfV1oGE0g6Oc59p4CZzEGminB7mW-6HfpCDA",
 };
