@@ -1,0 +1,18 @@
+{
+  "name": "time-for-medicine",
+  "version": "1.0.0",
+  "description": "吃藥時間 Time for Medicine — 純前端 PWA，每日服藥追蹤與慢性處方箋領藥提醒，資料只存裝置本機。",
+  "main": "index.html",
+  "scripts": {
+    "test": "node --test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Etnspop/time-for-medicine.git"
+  },
+  "keywords": ["pwa", "medication", "reminder", "health"],
+  "license": "MIT",
+  "devDependencies": {
+    "jsdom": "^29.1.1"
+  }
+}

@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0e9a90" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="吃藥時間" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="css/style.css" />
+  <title>吃藥時間 · Time for Medicine</title>
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-top">
+      <h1 class="brand"><span class="brand-icon">💊</span> 吃藥時間</h1>
+      <button id="notifyBtn" class="icon-btn" title="開啟提醒通知" aria-label="開啟提醒通知">🔔</button>
+    </div>
+    <p id="todayLabel" class="today-label"></p>
+    <div class="progress-wrap" id="progressWrap" hidden>
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      <span class="progress-text" id="progressText"></span>
+    </div>
+  </header>
+
+  <main>
+    <!-- 今日 -->
+    <section id="view-today" class="view active">
+      <div id="refillBanner" class="banner" hidden></div>
+      <div id="todayEmpty" class="empty-state" hidden>
+        <div class="empty-emoji">🗓️</div>
+        <p>今天沒有需要服用的藥物。</p>
+        <p class="muted">到「藥物」新增一筆吧。</p>
+      </div>
+      <ul id="todayList" class="dose-list"></ul>
+    </section>
+
+    <!-- 紀錄（月曆） -->
+    <section id="view-history" class="view">
+      <div class="cal-head">
+        <button id="calPrev" class="cal-nav" aria-label="上個月">‹</button>
+        <h2 id="calTitle" class="cal-title"></h2>
+        <button id="calNext" class="cal-nav" aria-label="下個月">›</button>
+      </div>
+      <div class="cal-weekdays">
+        <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
+      </div>
+      <div id="calGrid" class="cal-grid"></div>
+      <div class="cal-legend">
+        <span><i class="dot complete"></i>全部完成</span>
+        <span><i class="dot partial"></i>部分</span>
+        <span><i class="dot missed"></i>未服用</span>
+      </div>
+      <div id="dayDetail" class="day-detail" hidden></div>
+    </section>
+
+    <!-- 藥物 -->
+    <section id="view-meds" class="view">
+      <div id="medsEmpty" class="empty-state" hidden>
+        <div class="empty-emoji">💊</div>
+        <p>還沒有任何藥物。</p>
+        <p class="muted">點下方的「＋ 新增藥物」開始。</p>
+      </div>
+      <ul id="medList" class="med-list"></ul>
+      <button id="addMedBtn" class="primary-btn full">＋ 新增藥物</button>
+    </section>
+
+    <!-- 處方箋（慢性病連續處方箋領藥） -->
+    <section id="view-rx" class="view">
+      <p class="muted small section-intro">
+        記錄慢性病連續處方箋的每次領藥區間，到了可領藥的日子會提醒你。一張處方箋可加入多次領藥，也可加入多張處方箋。
+      </p>
+      <div id="rxEmpty" class="empty-state" hidden>
+        <div class="empty-emoji">📋</div>
+        <p>還沒有任何處方箋。</p>
+        <p class="muted">點下方的「＋ 新增處方箋」開始。</p>
+      </div>
+      <ul id="rxList" class="rx-list"></ul>
+      <button id="addRxBtn" class="primary-btn full">＋ 新增處方箋</button>
+    </section>
+
+    <!-- 更多 -->
+    <section id="view-more" class="view">
+      <div class="settings-group">
+        <h3 class="settings-title">提醒通知</h3>
+        <p class="muted small">到了服用時間，App 會主動跳出通知提醒你。</p>
+        <button id="moreNotifyBtn" class="ghost-btn full">🔔 開啟／測試提醒通知</button>
+        <label class="switch-row">
+          <span class="switch-text">
+            未服藥時重複提醒
+            <span class="muted small">沒勾選的藥每 4 小時提醒一次，直到你勾選或今天結束。</span>
+          </span>
+          <input type="checkbox" id="repeatToggle" class="switch" />
+        </label>
+      </div>
+
+      <div class="settings-group" id="pushGroup">
+        <h3 class="settings-title">背景推播（關閉也能提醒）</h3>
+        <p class="muted small">
+          一般提醒只在 App 開著或在背景時運作。開啟背景推播後，即使完全關閉 App，
+          到了服藥時間手機也會收到通知。需先依
+          <code>server/SETUP.md</code> 部署推播伺服器。
+        </p>
+        <p id="pushStatus" class="muted small"></p>
+        <button id="pushBtn" class="ghost-btn full">啟用背景推播</button>
+      </div>
+
+      <div class="settings-group">
+        <h3 class="settings-title">資料備份</h3>
+        <p class="muted small">所有資料只存在這台裝置。建議定期匯出備份，換手機或清除瀏覽器資料前才不會遺失。</p>
+        <button id="exportBtn" class="ghost-btn full">⬇️ 匯出備份檔（JSON）</button>
+        <button id="importBtn" class="ghost-btn full">⬆️ 從備份檔還原</button>
+        <input type="file" id="importFile" accept="application/json,.json" hidden />
+      </div>
+
+      <div class="settings-group">
+        <h3 class="settings-title">關於</h3>
+        <p class="muted small">
+          吃藥時間是一個純前端的 PWA，沒有帳號、沒有後端、不追蹤你。
+          藥物清單與服藥紀錄只寫進這台裝置的瀏覽器儲存空間。
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabbar">
+    <button class="tab active" data-view="today">
+      <span class="tab-icon">✅</span><span>今日</span>
+    </button>
+    <button class="tab" data-view="history">
+      <span class="tab-icon">🗓️</span><span>紀錄</span>
+    </button>
+    <button class="tab" data-view="meds">
+      <span class="tab-icon">💊</span><span>藥物</span>
+    </button>
+    <button class="tab" data-view="rx">
+      <span class="tab-icon">📋</span><span>處方箋</span>
+    </button>
+    <button class="tab" data-view="more">
+      <span class="tab-icon">⚙️</span><span>更多</span>
+    </button>
+  </nav>
+
+  <!-- 新增/編輯藥物的彈窗 -->
+  <div id="medModal" class="modal" hidden>
+    <div class="modal-card">
+      <h2 id="modalTitle">新增藥物</h2>
+      <form id="medForm">
+        <label>
+          藥物名稱
+          <input type="text" id="medName" required maxlength="40" placeholder="例如：血壓藥 / 維他命C" />
+        </label>
+        <div class="row">
+          <label class="flex2">
+            每次劑量
+            <input type="number" id="medDose" min="0" step="0.5" required placeholder="1" inputmode="decimal" />
+          </label>
+          <label class="flex1">
+            單位
+            <select id="medUnit">
+              <option>顆</option>
+              <option>錠</option>
+              <option>粒</option>
+              <option>包</option>
+              <option>ml</option>
+              <option>mg</option>
+              <option>滴</option>
+              <option>單位</option>
+            </select>
+          </label>
+        </div>
+        <div class="field">
+          <span class="field-label">服用時間（一天可多次）</span>
+          <div id="timesWrap" class="times-wrap"></div>
+          <button type="button" id="addTimeBtn" class="ghost-btn">＋ 增加一個時間</button>
+        </div>
+        <label>
+          備註（選填）
+          <input type="text" id="medNote" maxlength="60" placeholder="例如：飯後服用" />
+        </label>
+        <div class="modal-actions">
+          <button type="button" id="deleteMedBtn" class="danger-btn" hidden>刪除</button>
+          <span class="spacer"></span>
+          <button type="button" id="cancelBtn" class="ghost-btn">取消</button>
+          <button type="submit" class="primary-btn">儲存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 新增/編輯處方箋的彈窗 -->
+  <div id="rxModal" class="modal" hidden>
+    <div class="modal-card">
+      <h2 id="rxModalTitle">新增處方箋</h2>
+      <form id="rxForm">
+        <label>
+          處方箋名稱
+          <input type="text" id="rxName" required maxlength="40" placeholder="例如：心臟科 王醫師 / 降血壓藥" />
+        </label>
+        <div class="field">
+          <span class="field-label">領藥區間（可加入多次）</span>
+          <p class="muted small" style="margin:0 0 8px">每一段是一次可去藥局領藥的期間，例如 06/01～06/15。</p>
+          <div id="refillsWrap" class="refills-wrap"></div>
+          <button type="button" id="addRefillBtn" class="ghost-btn">＋ 增加一次領藥</button>
+        </div>
+        <label>
+          備註（選填）
+          <input type="text" id="rxNote" maxlength="60" placeholder="例如：記得帶健保卡" />
+        </label>
+        <div class="modal-actions">
+          <button type="button" id="deleteRxBtn" class="danger-btn" hidden>刪除</button>
+          <span class="spacer"></span>
+          <button type="button" id="rxCancelBtn" class="ghost-btn">取消</button>
+          <button type="submit" class="primary-btn">儲存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="js/logic.js"></script>
+  <script src="js/push-config.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
