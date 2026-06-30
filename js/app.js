@@ -696,6 +696,7 @@
     if (sub) {
       status.textContent = "背景推播已啟用：關閉 App 也會在服藥時間提醒你。";
       btn.textContent = "關閉背景推播"; btn.onclick = disablePush;
+      syncPush(); // 每次開啟時把最新時間/格式重新同步到伺服器
     } else {
       status.textContent = "尚未啟用。";
       btn.textContent = "啟用背景推播"; btn.onclick = enablePush;
